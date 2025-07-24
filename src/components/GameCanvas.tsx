@@ -208,9 +208,50 @@ export default function GameCanvas() {
 		}, 500);
 	};
 
+	// ✨ NEW: Start completely fresh game
+	const handleNewGame = () => {
+		// Reset to initial game state
+		gameState.setPlayer({
+			x: 50,
+			y: 250,
+			size: 20,
+			health: 100,
+			maxHealth: 100,
+			experience: 0,
+			level: 1,
+			inventory: [],
+			gold: 50,
+		});
+
+		// Generate fresh map
+		const result = mapGeneration.generateMap(
+			gameState.mapMode,
+			gameState.currentLayout
+		);
+
+		gameState.setNpcs(result.npcs);
+		gameState.setEnemies(result.enemies);
+		gameState.setTreasures(result.treasures);
+		gameState.setPlayer((prev) => ({
+			...prev,
+			x: result.playerSpawn.x,
+			y: result.playerSpawn.y,
+		}));
+
+		gameState.setGameMessage("New game started!");
+		setTimeout(() => gameState.setGameMessage(""), 3000);
+
+		// Auto-save the new game state
+		setTimeout(() => {
+			if (gameInitialized) {
+				saveSystem.autoSave();
+			}
+		}, 500);
+	};
+
 	return (
 		<div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-			{/* ✨ Updated Map Controls with Save Button */}
+			{/* ✨ Updated Map Controls with Save Button and New Game */}
 			<MapControls
 				mapMode={gameState.mapMode}
 				currentLayout={gameState.currentLayout}
@@ -218,6 +259,7 @@ export default function GameCanvas() {
 				onLayoutChange={gameState.setCurrentLayout}
 				onGenerateMap={handleGenerateMap}
 				onOpenSaveLoad={() => setShowSaveLoadModal(true)}
+				onNewGame={handleNewGame}
 			/>
 
 			{/* Game Container */}
