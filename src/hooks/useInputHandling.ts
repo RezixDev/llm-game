@@ -1,4 +1,4 @@
-// ===== hooks/useInputHandling.ts =====
+// ===== hooks/useInputHandling.ts (Updated) =====
 import { useEffect } from 'react';
 import type { Player, NPC, Enemy, Treasure } from '@/types/GameTypes';
 import { isNearEntity } from '@/utils/gameUtils';
@@ -28,6 +28,13 @@ interface InputHandlingProps {
   sendToLLM: (userInput: string, npcName: string, npcType?: string) => Promise<void>;
   collectTreasure: (treasure: Treasure) => void;
   
+  // Save system actions (NEW)
+  saveActions: {
+    quickSave: () => boolean;
+    quickLoad: () => boolean;
+    openSaveLoad: () => void;
+  };
+  
   // Constants
   canvasWidth?: number;
   canvasHeight?: number;
@@ -45,6 +52,7 @@ export const useInputHandling = ({
   combat,
   sendToLLM,
   collectTreasure,
+  saveActions,
   canvasWidth = 800,
   canvasHeight = 600,
   playerSize = 20,
@@ -52,6 +60,25 @@ export const useInputHandling = ({
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Save/Load hotkeys (F5 = Quick Save, F9 = Quick Load, ESC = Save Menu)
+      if (e.key === "F5") {
+        e.preventDefault();
+        saveActions.quickSave();
+        return;
+      }
+      
+      if (e.key === "F9") {
+        e.preventDefault();
+        saveActions.quickLoad();
+        return;
+      }
+      
+      if (e.key === "Escape") {
+        e.preventDefault();
+        saveActions.openSaveLoad();
+        return;
+      }
+
       // Combat input handling
       if (combat.inCombat && (e.key === "1" || e.key === "2")) {
         if (e.key === "1" && !combat.enemyTalking) {
@@ -146,10 +173,9 @@ export const useInputHandling = ({
     setShowInventory,
     sendToLLM,
     collectTreasure,
+    saveActions,
     canvasWidth,
     canvasHeight,
     playerSize,
   ]);
 };
-
-

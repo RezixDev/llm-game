@@ -1,7 +1,7 @@
-// ===== Final Refactored GameCanvas.tsx (Under 100 lines!) =====
-import { useRef } from "react";
+// ===== Updated GameCanvas.tsx with Save System =====
+import { useRef, useState, useEffect } from "react";
 
-// ✨ NEW: Import all our extracted systems
+// ✨ Import all our extracted systems (including new save system)
 import { useGameState } from "@/hooks/useGameState";
 import { useCombatSystem } from "@/hooks/useCombatSystem";
 import { useTradingSystem } from "@/hooks/useTradingSystem";
@@ -10,14 +10,16 @@ import { useInputHandling } from "@/hooks/useInputHandling";
 import { useGameRenderer } from "@/hooks/useGameRenderer";
 import { useGameLoop } from "@/hooks/useGameLoop";
 import { useMapGeneration } from "@/hooks/useMapGeneration";
+import { useSaveSystem } from "@/hooks/useSaveSystem"; // NEW
 
-// ✨ NEW: Import all UI components
+// ✨ Import all UI components (including new save modal)
 import { MapControls } from "@/components/GameUI/MapControls";
 import { CombatModal } from "@/components/GameUI/CombatModal";
 import { InventoryPanel } from "@/components/GameUI/InventoryPanel";
 import { PlayerStats } from "@/components/GameUI/PlayerStats";
 import { ControlsHelp } from "@/components/GameUI/ControlsHelp";
 import { GameMessages } from "@/components/GameUI/GameMessages";
+import { SaveLoadModal } from "@/components/GameUI/SaveLoadModal"; // NEW
 
 // Game constants
 const CANVAS_WIDTH = 800;
@@ -25,11 +27,33 @@ const CANVAS_HEIGHT = 600;
 
 export default function GameCanvas() {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const [showSaveLoadModal, setShowSaveLoadModal] = useState(false); // NEW
 
-	// ✨ NEW: Use extracted game state management
+	// ✨ Use extracted game state management
 	const gameState = useGameState();
 
-	// ✨ NEW: Use extracted game systems
+	// ✨ NEW: Initialize save system
+	const saveSystem = useSaveSystem({
+		// Current game state
+		player: gameState.player,
+		npcs: gameState.npcs,
+		enemies: gameState.enemies,
+		treasures: gameState.treasures,
+		mapMode: gameState.mapMode,
+		currentLayout: gameState.currentLayout,
+		gameMessage: gameState.gameMessage,
+
+		// State setters
+		setPlayer: gameState.setPlayer,
+		setNpcs: gameState.setNpcs,
+		setEnemies: gameState.setEnemies,
+		setTreasures: gameState.setTreasures,
+		setMapMode: gameState.setMapMode,
+		setCurrentLayout: gameState.setCurrentLayout,
+		setGameMessage: gameState.setGameMessage,
+	});
+
+	// ✨ Use extracted game systems
 	const combat = useCombatSystem({
 		player: gameState.player,
 		enemies: gameState.enemies,
@@ -55,7 +79,7 @@ export default function GameCanvas() {
 		canvasHeight: CANVAS_HEIGHT,
 	});
 
-	// ✨ NEW: Use extracted rendering system
+	// ✨ Use extracted rendering system
 	const renderer = useGameRenderer({
 		canvasRef,
 		player: gameState.player,
@@ -66,7 +90,7 @@ export default function GameCanvas() {
 		canvasHeight: CANVAS_HEIGHT,
 	});
 
-	// ✨ NEW: Use extracted input handling
+	// ✨ Use extracted input handling (updated with save actions)
 	useInputHandling({
 		player: gameState.player,
 		npcs: gameState.npcs,
@@ -78,15 +102,34 @@ export default function GameCanvas() {
 		combat,
 		sendToLLM: trading.sendToLLM,
 		collectTreasure: treasure.collectTreasure,
+		saveActions: {
+			quickSave: saveSystem.quickSave,
+			quickLoad: saveSystem.quickLoad,
+			openSaveLoad: () => setShowSaveLoadModal(true),
+		},
 		canvasWidth: CANVAS_WIDTH,
 		canvasHeight: CANVAS_HEIGHT,
 		playerSize: gameState.player.size,
 	});
 
-	// ✨ NEW: Use extracted game loop
+	// ✨ Use extracted game loop
 	useGameLoop(renderer.draw);
 
-	// ✨ NEW: Simplified map initialization
+	// ✨ Auto-save every 2 minutes
+	useEffect(() => {
+		const autoSaveInterval = setInterval(() => {
+			saveSystem.autoSave();
+		}, 120000); // 2 minutes
+
+		return () => clearInterval(autoSaveInterval);
+	}, [saveSystem.autoSave]);
+
+	// ✨ Auto-save on important events (level up, enemy defeat, treasure collection)
+	useEffect(() => {
+		saveSystem.autoSave();
+	}, [gameState.player.level, gameState.player.gold]);
+
+	// ✨ Simplified map initialization
 	const handleGenerateMap = () => {
 		const result = mapGeneration.generateMap(
 			gameState.mapMode,
@@ -105,13 +148,14 @@ export default function GameCanvas() {
 
 	return (
 		<div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-			{/* ✨ NEW: Extracted Map Controls */}
+			{/* ✨ Updated Map Controls with Save Button */}
 			<MapControls
 				mapMode={gameState.mapMode}
 				currentLayout={gameState.currentLayout}
 				onMapModeChange={gameState.setMapMode}
 				onLayoutChange={gameState.setCurrentLayout}
 				onGenerateMap={handleGenerateMap}
+				onOpenSaveLoad={() => setShowSaveLoadModal(true)}
 			/>
 
 			{/* Game Container */}
@@ -126,7 +170,7 @@ export default function GameCanvas() {
 					style={{ border: "2px solid #333", backgroundColor: "#2d5016" }}
 				/>
 
-				{/* ✨ All UI components are now clean and extracted */}
+				{/* ✨ All UI components */}
 				<PlayerStats
 					player={gameState.player}
 					mapMode={gameState.mapMode}
@@ -148,6 +192,22 @@ export default function GameCanvas() {
 				<GameMessages gameMessage={gameState.gameMessage} />
 
 				<ControlsHelp />
+
+				{/* ✨ NEW: Save/Load Modal */}
+				<SaveLoadModal
+					isOpen={showSaveLoadModal}
+					onClose={() => setShowSaveLoadModal(false)}
+					onSave={saveSystem.saveGame}
+					onLoad={saveSystem.loadGame}
+					onDelete={saveSystem.deleteSave}
+					getSaveSlots={saveSystem.getSaveSlots}
+					onQuickSave={saveSystem.quickSave}
+					onQuickLoad={saveSystem.quickLoad}
+					onAutoSave={saveSystem.autoSave}
+					onLoadAutoSave={saveSystem.loadAutoSave}
+					onExport={saveSystem.exportSave}
+					onImport={saveSystem.importSave}
+				/>
 			</div>
 		</div>
 	);
