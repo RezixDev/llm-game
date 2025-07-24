@@ -1,4 +1,4 @@
-// ===== services/emotionDetectionService.ts =====
+// ===== services/emotionDetectionService.ts (Fixed Version) =====
 import * as faceapi from 'face-api.js';
 
 export type EmotionData = {
@@ -36,9 +36,15 @@ export class EmotionDetectionService {
   };
   private onEmotionCallback: ((emotion: EmotionData | null) => void) | null = null;
 
-  // Smoothing parameters
-  private readonly SMOOTH_FACTOR = 0.3; // Lower = more smoothing
-  private readonly STRONG_EMOTION_THRESHOLD = 0.7; // Above this, use raw emotion
+  // Performance optimization flags
+  private lastDetectionTime = 0;
+  private readonly DETECTION_THROTTLE = 800; // Slower detection rate in game
+  private readonly SMOOTH_FACTOR = 0.4; // More smoothing
+  private readonly STRONG_EMOTION_THRESHOLD = 0.6;
+  
+  // Video stability flags
+  private videoStabilityChecks = 0;
+  private readonly MAX_STABILITY_CHECKS = 5;
   
   static getInstance(): EmotionDetectionService {
     if (!EmotionDetectionService.instance) {
@@ -51,37 +57,24 @@ export class EmotionDetectionService {
     if (this.modelsLoaded) return;
 
     try {
-      console.log('Loading face-api.js models...');
+      console.log('🔄 Loading face-api.js models...');
       
-      // Check if models exist
-      const modelPaths = [
-        '/models/tiny_face_detector_model-weights_manifest.json',
-        '/models/face_expression_model-weights_manifest.json'
+      // Load models with error handling
+      const modelPromises = [
+        faceapi.nets.tinyFaceDetector.loadFromUri('/models').catch(e => {
+          throw new Error(`TinyFaceDetector load failed: ${e.message}`);
+        }),
+        faceapi.nets.faceExpressionNet.loadFromUri('/models').catch(e => {
+          throw new Error(`FaceExpressionNet load failed: ${e.message}`);
+        })
       ];
 
-      for (const path of modelPaths) {
-        try {
-          const response = await fetch(path);
-          if (!response.ok) {
-            throw new Error(`Model not found: ${path} (${response.status})`);
-          }
-          console.log(`✓ Found model: ${path}`);
-        } catch (error) {
-          console.error(`✗ Missing model: ${path}`);
-          throw error;
-        }
-      }
-      
-      // Load only the models we need for performance
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
-        faceapi.nets.faceExpressionNet.loadFromUri('/models'),
-      ]);
+      await Promise.all(modelPromises);
 
       this.modelsLoaded = true;
-      console.log('✓ Face-api.js models loaded successfully');
+      console.log('✅ Face-api.js models loaded successfully');
     } catch (error) {
-      console.error('✗ Failed to load face-api.js models:', error);
+      console.error('❌ Model loading failed:', error);
       throw new Error(`Could not load emotion detection models: ${error.message}`);
     }
   }
@@ -94,39 +87,48 @@ export class EmotionDetectionService {
       
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user'
+          width: { ideal: 640, max: 640 },
+          height: { ideal: 480, max: 480 },
+          facingMode: 'user',
+          frameRate: { ideal: 15, max: 20 } // Lower frame rate for performance
         }
       });
 
-      console.log('✓ Camera access granted');
+      console.log('✅ Camera stream obtained');
 
-      // Create video element
+      // Create video element with optimized settings
       this.videoElement = document.createElement('video');
       this.videoElement.srcObject = this.stream;
       this.videoElement.autoplay = true;
       this.videoElement.muted = true;
       this.videoElement.playsInline = true;
-
+      
+      // Optimize video element for better performance
+      this.videoElement.style.width = '320px';
+      this.videoElement.style.height = '240px';
+      
       return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Camera initialization timeout'));
+        }, 10000);
+
         this.videoElement!.onloadedmetadata = () => {
-          console.log(`✓ Video ready: ${this.videoElement!.videoWidth}x${this.videoElement!.videoHeight}`);
+          clearTimeout(timeout);
+          console.log(`✅ Video ready: ${this.videoElement!.videoWidth}x${this.videoElement!.videoHeight}`);
+          
+          // Reset stability checks
+          this.videoStabilityChecks = 0;
           resolve();
         };
         
         this.videoElement!.onerror = (error) => {
-          console.error('✗ Video element error:', error);
+          clearTimeout(timeout);
+          console.error('❌ Video element error:', error);
           reject(new Error('Video element failed to load'));
         };
-        
-        // Timeout after 10 seconds
-        setTimeout(() => {
-          reject(new Error('Camera initialization timeout'));
-        }, 10000);
       });
     } catch (error) {
-      console.error('✗ Failed to start camera:', error);
+      console.error('❌ Failed to start camera:', error);
       if (error.name === 'NotAllowedError') {
         throw new Error('Camera permission denied');
       } else if (error.name === 'NotFoundError') {
@@ -138,18 +140,26 @@ export class EmotionDetectionService {
   }
 
   async stopCamera(): Promise<void> {
+    console.log('🛑 Stopping camera...');
+    
+    this.stopDetection();
+    
     if (this.stream) {
-      this.stream.getTracks().forEach(track => track.stop());
+      this.stream.getTracks().forEach(track => {
+        track.stop();
+        console.log(`Track stopped: ${track.kind}`);
+      });
       this.stream = null;
     }
     
     if (this.videoElement) {
+      this.videoElement.pause();
       this.videoElement.srcObject = null;
       this.videoElement = null;
     }
 
-    this.stopDetection();
     this.resetEmotionHistory();
+    console.log('✅ Camera stopped');
   }
 
   async startDetection(onEmotionUpdate: (emotion: EmotionData | null) => void): Promise<void> {
@@ -170,19 +180,59 @@ export class EmotionDetectionService {
 
     this.onEmotionCallback = onEmotionUpdate;
     this.isDetecting = true;
+    this.lastDetectionTime = 0; // Reset throttle
 
-    // Wait a bit for video to stabilize
-    setTimeout(() => {
-      // Start detection loop (every 500ms for smooth real-time feel)
-      this.detectionInterval = window.setInterval(async () => {
-        await this.detectEmotion();
-      }, 500);
+    console.log('🚀 Starting emotion detection with game optimization...');
 
-      console.log('✅ Emotion detection started');
-    }, 1000); // 1 second delay to let video stabilize
+    // Wait for video to stabilize before starting detection
+    await this.waitForVideoStability();
+
+    // Start detection loop with throttling for game performance
+    this.detectionInterval = window.setInterval(async () => {
+      const now = Date.now();
+      
+      // Throttle detection calls to reduce CPU usage during gameplay
+      if (now - this.lastDetectionTime < this.DETECTION_THROTTLE) {
+        return;
+      }
+      
+      this.lastDetectionTime = now;
+      await this.detectEmotion();
+    }, 200); // Check every 200ms, but throttle actual detection
+
+    console.log('✅ Emotion detection started with game optimization');
+  }
+
+  private async waitForVideoStability(): Promise<void> {
+    return new Promise((resolve) => {
+      const checkStability = () => {
+        if (!this.videoElement || 
+            this.videoElement.videoWidth === 0 || 
+            this.videoElement.videoHeight === 0 ||
+            this.videoElement.readyState < 2) {
+          
+          this.videoStabilityChecks++;
+          
+          if (this.videoStabilityChecks > this.MAX_STABILITY_CHECKS) {
+            console.warn('⚠️ Video stability timeout, proceeding anyway');
+            resolve();
+            return;
+          }
+          
+          setTimeout(checkStability, 200);
+        } else {
+          console.log('✅ Video stability confirmed');
+          resolve();
+        }
+      };
+      
+      checkStability();
+    });
   }
 
   stopDetection(): void {
+    console.log('🛑 Stopping emotion detection...');
+    
     this.isDetecting = false;
     
     if (this.detectionInterval) {
@@ -191,30 +241,34 @@ export class EmotionDetectionService {
     }
 
     this.onEmotionCallback = null;
-    console.log('Emotion detection stopped');
+    console.log('✅ Emotion detection stopped');
   }
 
   private async detectEmotion(): Promise<void> {
     if (!this.videoElement || !this.isDetecting) return;
 
     try {
-      // Check if video is ready
-      if (this.videoElement.videoWidth === 0 || this.videoElement.videoHeight === 0) {
-        console.warn('⚠️ Video not ready for emotion detection');
+      // Enhanced video readiness check
+      if (this.videoElement.videoWidth === 0 || 
+          this.videoElement.videoHeight === 0 ||
+          this.videoElement.readyState < 2 ||
+          this.videoElement.paused ||
+          this.videoElement.ended) {
+        console.warn('⚠️ Video not ready for detection');
+        this.updateEmotionHistory(null);
         return;
       }
 
-      // Use the same detection parameters as the working debug test
+      // Use optimized detection settings for game performance
       const detections = await faceapi
         .detectAllFaces(this.videoElement, new faceapi.TinyFaceDetectorOptions({
-          inputSize: 224,
-          scoreThreshold: 0.3 // Lower threshold like in debug test
+          inputSize: 192, // Smaller input size for better performance
+          scoreThreshold: 0.4 // Slightly higher threshold for stability
         }))
         .withFaceExpressions();
 
       if (detections.length === 0) {
-        // No face detected - disable emotion context
-        console.log('👤 No face detected in main detection');
+        // No face detected
         this.updateEmotionHistory(null);
         return;
       }
@@ -222,10 +276,15 @@ export class EmotionDetectionService {
       const expressions = detections[0].expressions;
       const emotionData = this.processExpressions(expressions);
       
-      console.log('😊 Main detection - emotion:', emotionData.primary, `(${Math.round(emotionData.confidence * 100)}%)`);
+      // Additional confidence filtering for game stability
+      if (emotionData.confidence < 0.3) {
+        this.updateEmotionHistory(null);
+        return;
+      }
+
       this.updateEmotionHistory(emotionData);
     } catch (error) {
-      console.error('❌ Main emotion detection error:', error);
+      console.error('❌ Emotion detection error:', error);
       this.updateEmotionHistory(null);
     }
   }
@@ -241,15 +300,26 @@ export class EmotionDetectionService {
       neutral: expressions.neutral,
     };
 
-    // Find primary emotion
-    const primaryEmotion = Object.entries(emotionScores).reduce((max, [emotion, score]) => 
-      score > max.score ? { emotion, score } : max,
-      { emotion: 'neutral', score: 0 }
-    );
+    // Find primary emotion with enhanced filtering
+    const sortedEmotions = Object.entries(emotionScores)
+      .sort(([, a], [, b]) => b - a);
+    
+    const [primaryEmotion, primaryScore] = sortedEmotions[0];
+    const [secondaryEmotion, secondaryScore] = sortedEmotions[1];
+    
+    // If emotions are very close, default to neutral for stability
+    if (primaryScore - secondaryScore < 0.1 && primaryScore < 0.6) {
+      return {
+        primary: 'neutral',
+        confidence: emotionScores.neutral,
+        timestamp: Date.now(),
+        allEmotions: emotionScores,
+      };
+    }
 
     return {
-      primary: primaryEmotion.emotion,
-      confidence: primaryEmotion.score,
+      primary: primaryEmotion,
+      confidence: primaryScore,
       timestamp: Date.now(),
       allEmotions: emotionScores,
     };
@@ -260,28 +330,62 @@ export class EmotionDetectionService {
     this.emotionHistory.previous = this.emotionHistory.current;
     this.emotionHistory.current = newEmotion;
 
-    // Apply smoothing logic
+    // Apply enhanced smoothing for game stability
     if (newEmotion) {
-      this.emotionHistory.smoothed = this.applySmoothing(newEmotion);
+      this.emotionHistory.smoothed = this.applyEnhancedSmoothing(newEmotion);
     } else {
-      this.emotionHistory.smoothed = null;
+      // Gradually fade out emotion rather than immediately clearing
+      if (this.emotionHistory.smoothed) {
+        const fadedEmotion = { ...this.emotionHistory.smoothed };
+        fadedEmotion.confidence *= 0.8; // Fade confidence
+        
+        if (fadedEmotion.confidence < 0.2) {
+          this.emotionHistory.smoothed = null;
+        } else {
+          this.emotionHistory.smoothed = fadedEmotion;
+        }
+      }
     }
 
-    // Notify callback
+    // Notify callback with stability check
     if (this.onEmotionCallback) {
       this.onEmotionCallback(this.emotionHistory.smoothed);
     }
   }
 
-  private applySmoothing(newEmotion: EmotionData): EmotionData {
+  private applyEnhancedSmoothing(newEmotion: EmotionData): EmotionData {
     const previous = this.emotionHistory.smoothed;
     
-    // If no previous emotion or strong emotion detected, use raw emotion
-    if (!previous || newEmotion.confidence > this.STRONG_EMOTION_THRESHOLD) {
-      return newEmotion;
+    // If no previous emotion, use new emotion but with reduced confidence for stability
+    if (!previous) {
+      return {
+        ...newEmotion,
+        confidence: newEmotion.confidence * 0.8 // Reduce initial confidence
+      };
     }
 
-    // Apply smoothing to emotion scores
+    // If strong emotion detected, use it but still apply some smoothing
+    if (newEmotion.confidence > this.STRONG_EMOTION_THRESHOLD) {
+      const smoothedEmotions: any = {};
+      Object.entries(newEmotion.allEmotions).forEach(([emotion, score]) => {
+        const prevScore = previous.allEmotions[emotion as keyof typeof previous.allEmotions] || 0;
+        smoothedEmotions[emotion] = prevScore * 0.3 + score * 0.7; // Less smoothing for strong emotions
+      });
+
+      const primaryEmotion = Object.entries(smoothedEmotions).reduce((max, [emotion, score]) => 
+        score > max.score ? { emotion, score } : max,
+        { emotion: 'neutral', score: 0 }
+      );
+
+      return {
+        primary: primaryEmotion.emotion,
+        confidence: primaryEmotion.score,
+        timestamp: Date.now(),
+        allEmotions: smoothedEmotions,
+      };
+    }
+
+    // Apply heavy smoothing for weak emotions to prevent flickering
     const smoothedEmotions: any = {};
     Object.entries(newEmotion.allEmotions).forEach(([emotion, score]) => {
       const prevScore = previous.allEmotions[emotion as keyof typeof previous.allEmotions] || 0;
@@ -293,6 +397,16 @@ export class EmotionDetectionService {
       score > max.score ? { emotion, score } : max,
       { emotion: 'neutral', score: 0 }
     );
+
+    // If confidence is too low after smoothing, default to neutral
+    if (primaryEmotion.score < 0.35) {
+      return {
+        primary: 'neutral',
+        confidence: smoothedEmotions.neutral || 0.5,
+        timestamp: Date.now(),
+        allEmotions: smoothedEmotions,
+      };
+    }
 
     return {
       primary: primaryEmotion.emotion,
@@ -331,12 +445,12 @@ export class EmotionDetectionService {
   getEmotionContext(): string {
     const emotion = this.getCurrentEmotion();
     
-    if (!emotion) {
+    if (!emotion || emotion.confidence < 0.4) {
       return '';
     }
 
     const confidenceLevel = emotion.confidence > 0.7 ? 'clearly' : 
-                           emotion.confidence > 0.4 ? 'somewhat' : 'slightly';
+                           emotion.confidence > 0.5 ? 'somewhat' : 'slightly';
 
     return `The player appears ${confidenceLevel} ${emotion.primary}`;
   }
@@ -345,7 +459,7 @@ export class EmotionDetectionService {
   getEmotionDescription(): string {
     const emotion = this.getCurrentEmotion();
     
-    if (!emotion) return 'unknown';
+    if (!emotion || emotion.confidence < 0.4) return 'unknown';
 
     const descriptions: Record<string, string> = {
       happy: 'cheerful and pleased',
@@ -358,5 +472,23 @@ export class EmotionDetectionService {
     };
 
     return descriptions[emotion.primary] || 'uncertain';
+  }
+
+  // Performance monitoring method
+  getPerformanceStats(): { 
+    isDetecting: boolean; 
+    lastDetectionTime: number; 
+    detectionRate: number;
+    videoReady: boolean;
+  } {
+    return {
+      isDetecting: this.isDetecting,
+      lastDetectionTime: this.lastDetectionTime,
+      detectionRate: this.DETECTION_THROTTLE,
+      videoReady: this.videoElement ? 
+        this.videoElement.videoWidth > 0 && 
+        this.videoElement.videoHeight > 0 && 
+        this.videoElement.readyState >= 2 : false
+    };
   }
 }

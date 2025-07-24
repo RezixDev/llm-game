@@ -1,4 +1,4 @@
-// ===== hooks/useEmotionDetection.ts =====
+// ===== hooks/useEmotionDetection.ts (Optimized Version) =====
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { EmotionDetectionService, type EmotionData } from '@/services/emotionDetectionService';
 
@@ -21,6 +21,7 @@ export interface EmotionDetectionActions {
 
 export const useEmotionDetection = () => {
   const serviceRef = useRef<EmotionDetectionService>(EmotionDetectionService.getInstance());
+  const emotionUpdateTimeoutRef = useRef<number>();
   
   const [state, setState] = useState<EmotionDetectionState>({
     isEnabled: false,
@@ -28,33 +29,70 @@ export const useEmotionDetection = () => {
     isActive: false,
     currentEmotion: null,
     error: null,
-    hasCamera: true, // Assume true until proven otherwise
+    hasCamera: true,
     hasPermission: null,
   });
 
-  // Check camera availability on mount
+  // Debounced state updates to prevent excessive re-renders
+  const updateStateDebounced = useCallback((updates: Partial<EmotionDetectionState>) => {
+    if (emotionUpdateTimeoutRef.current) {
+      clearTimeout(emotionUpdateTimeoutRef.current);
+    }
+    
+    emotionUpdateTimeoutRef.current = window.setTimeout(() => {
+      setState(prev => ({ ...prev, ...updates }));
+    }, 50); // 50ms debounce
+  }, []);
+
+  // Optimized emotion update callback with reduced re-renders
+  const handleEmotionUpdate = useCallback((emotion: EmotionData | null) => {
+    // Only update if emotion actually changed significantly
+    setState(prev => {
+      if (!emotion && !prev.currentEmotion) return prev;
+      
+      if (emotion && prev.currentEmotion && 
+          emotion.primary === prev.currentEmotion.primary &&
+          Math.abs(emotion.confidence - prev.currentEmotion.confidence) < 0.1) {
+        return prev; // Skip minor changes
+      }
+      
+      return { ...prev, currentEmotion: emotion };
+    });
+  }, []);
+
+  // Check camera availability only once
   useEffect(() => {
+    let mounted = true;
+    
     const checkCameraAvailability = async () => {
       try {
+        if (!navigator.mediaDevices?.enumerateDevices) {
+          if (mounted) setState(prev => ({ ...prev, hasCamera: false }));
+          return;
+        }
+        
         const devices = await navigator.mediaDevices.enumerateDevices();
         const hasVideoInput = devices.some(device => device.kind === 'videoinput');
         
-        setState(prev => ({ ...prev, hasCamera: hasVideoInput }));
+        if (mounted) {
+          setState(prev => ({ ...prev, hasCamera: hasVideoInput }));
+        }
       } catch (error) {
         console.warn('Could not check camera availability:', error);
-        setState(prev => ({ ...prev, hasCamera: false }));
+        if (mounted) {
+          setState(prev => ({ ...prev, hasCamera: false }));
+        }
       }
     };
 
     checkCameraAvailability();
+    
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // Emotion update callback
-  const handleEmotionUpdate = useCallback((emotion: EmotionData | null) => {
-    setState(prev => ({ ...prev, currentEmotion: emotion }));
-  }, []);
-
-  // Enable emotion detection
+  // Memoized enable detection function
   const enableDetection = useCallback(async () => {
     if (!state.hasCamera) {
       setState(prev => ({ 
@@ -69,9 +107,8 @@ export const useEmotionDetection = () => {
     try {
       const service = serviceRef.current;
       
-      console.log('🚀 Starting emotion detection from hook...');
+      console.log('🚀 Starting emotion detection (optimized)...');
       
-      // Start detection with proper async handling
       await service.startDetection(handleEmotionUpdate);
       
       setState(prev => ({ 
@@ -82,7 +119,7 @@ export const useEmotionDetection = () => {
         hasPermission: true,
       }));
 
-      console.log('✅ Emotion detection enabled successfully from hook');
+      console.log('✅ Emotion detection enabled (optimized)');
     } catch (error: any) {
       console.error('❌ Failed to enable emotion detection:', error);
       
@@ -104,7 +141,7 @@ export const useEmotionDetection = () => {
     }
   }, [state.hasCamera, handleEmotionUpdate]);
 
-  // Disable emotion detection
+  // Memoized disable detection function
   const disableDetection = useCallback(() => {
     const service = serviceRef.current;
     service.stopDetection();
@@ -117,10 +154,10 @@ export const useEmotionDetection = () => {
       error: null,
     }));
 
-    console.log('Emotion detection disabled');
+    console.log('Emotion detection disabled (optimized)');
   }, []);
 
-  // Toggle detection
+  // Memoized toggle function
   const toggleDetection = useCallback(async () => {
     if (state.isEnabled) {
       disableDetection();
@@ -129,7 +166,7 @@ export const useEmotionDetection = () => {
     }
   }, [state.isEnabled, enableDetection, disableDetection]);
 
-  // Clear error
+  // Memoized clear error function
   const clearError = useCallback(() => {
     setState(prev => ({ ...prev, error: null }));
   }, []);
@@ -137,13 +174,17 @@ export const useEmotionDetection = () => {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (emotionUpdateTimeoutRef.current) {
+        clearTimeout(emotionUpdateTimeoutRef.current);
+      }
+      
       if (state.isActive) {
         serviceRef.current.stopCamera();
       }
     };
-  }, [state.isActive]);
+  }, []); // Only run on unmount
 
-  // Public methods for getting emotion context
+  // Memoized utility methods
   const getEmotionContext = useCallback((): string => {
     if (!state.isEnabled || !state.currentEmotion) {
       return '';
@@ -159,14 +200,15 @@ export const useEmotionDetection = () => {
   }, [state.isEnabled, state.currentEmotion]);
 
   const getVideoElement = useCallback((): HTMLVideoElement | null => {
-    const videoElement = serviceRef.current.getVideoElement();
-    console.log('🎥 Video element request:', {
-      exists: !!videoElement,
-      dimensions: videoElement ? `${videoElement.videoWidth}x${videoElement.videoHeight}` : 'N/A',
-      readyState: videoElement?.readyState,
-      srcObject: !!videoElement?.srcObject
-    });
-    return videoElement;
+    return serviceRef.current.getVideoElement();
+  }, []);
+
+  // Performance monitoring (development only)
+  const getPerformanceStats = useCallback(() => {
+    if (process.env.NODE_ENV === 'development') {
+      return serviceRef.current.getPerformanceStats();
+    }
+    return null;
   }, []);
 
   return {
@@ -183,5 +225,6 @@ export const useEmotionDetection = () => {
     getEmotionContext,
     getEmotionDescription,
     getVideoElement,
+    getPerformanceStats,
   };
 };

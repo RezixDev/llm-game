@@ -1,7 +1,8 @@
-// ===== components/GameCanvas.tsx (Enhanced with Full Emotion Detection) =====
-import { useRef, useState, useEffect } from "react";
+// ===== components/GameCanvas.tsx (Optimized Version) =====
+import { useRef, useState, useEffect, useCallback, useMemo } from "react";
+import React from "react";
 
-// ✨ Import all our systems (including emotion detection)
+// Import all your existing hooks and components...
 import { useGameState } from "@/hooks/useGameState";
 import { useCombatSystem } from "@/hooks/useCombatSystem";
 import { useTradingSystem } from "@/hooks/useTradingSystem";
@@ -11,9 +12,9 @@ import { useGameRenderer } from "@/hooks/useGameRenderer";
 import { useGameLoop } from "@/hooks/useGameLoop";
 import { useMapGeneration } from "@/hooks/useMapGeneration";
 import { useSaveSystem } from "@/hooks/useSaveSystem";
-import { useEmotionDetection } from "@/hooks/useEmotionDetection"; // NEW
+import { useEmotionDetection } from "@/hooks/useEmotionDetection";
 
-// ✨ Import all UI components (including emotion components)
+// Import UI components
 import { MapControls } from "@/components/GameUI/MapControls";
 import { CombatModal } from "@/components/GameUI/CombatModal";
 import { InventoryPanel } from "@/components/GameUI/InventoryPanel";
@@ -21,129 +22,216 @@ import { PlayerStats } from "@/components/GameUI/PlayerStats";
 import { ControlsHelp } from "@/components/GameUI/ControlsHelp";
 import { GameMessages } from "@/components/GameUI/GameMessages";
 import { SaveLoadModal } from "@/components/GameUI/SaveLoadModal";
-import { EmotionIndicator } from "@/components/GameUI/EmotionIndicator"; // NEW
-import { EmotionControls } from "@/components/GameUI/EmotionControls"; // NEW
-import { EmotionCameraPreview } from "@/components/GameUI/EmotionCameraPreview"; // NEW
-import { EmotionDebugTest } from "@/components/GameUI/EmotionDebugTest"; // TEMP DEBUG
+import { EmotionIndicator } from "@/components/GameUI/EmotionIndicator";
+import { EmotionControls } from "@/components/GameUI/EmotionControls";
+import { EmotionCameraPreview } from "@/components/GameUI/EmotionCameraPreview";
+import { EmotionDebugTest } from "@/components/GameUI/EmotionDebugTest";
 
 // Game constants
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
+
+// Memoized UI Components to prevent unnecessary re-renders
+const MemoizedPlayerStats = React.memo(({ player, mapMode, currentLayout }) => (
+	<PlayerStats
+		player={player}
+		mapMode={mapMode}
+		currentLayout={currentLayout}
+	/>
+));
+
+const MemoizedEmotionIndicator = React.memo(
+	({ emotion, isActive, isEnabled, error }) => (
+		<EmotionIndicator
+			emotion={emotion}
+			isActive={isActive}
+			isEnabled={isEnabled}
+			error={error}
+		/>
+	)
+);
+
+const MemoizedControlsHelp = React.memo(() => <ControlsHelp />);
+
+const MemoizedInventoryPanel = React.memo(({ player, showInventory }) => (
+	<InventoryPanel player={player} showInventory={showInventory} />
+));
 
 export default function GameCanvas() {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
 	const [gameInitialized, setGameInitialized] = useState(false);
 	const [showCameraPreview, setShowCameraPreview] = useState(false);
-	const [showDebugTest, setShowDebugTest] = useState(false); // TEMP DEBUG
+	const [showDebugTest, setShowDebugTest] = useState(false);
 
-	// ✨ Use extracted game state management
+	// Game state management
 	const gameState = useGameState();
 
-	// ✨ NEW: Initialize emotion detection system
+	// Emotion detection with stable reference
 	const emotion = useEmotionDetection();
 
-	// ✨ Initialize save system
-	const saveSystem = useSaveSystem({
-		// Current game state
-		player: gameState.player,
-		npcs: gameState.npcs,
-		enemies: gameState.enemies,
-		treasures: gameState.treasures,
-		mapMode: gameState.mapMode,
-		currentLayout: gameState.currentLayout,
-		gameMessage: gameState.gameMessage,
+	// Save system with memoized props
+	const saveSystemProps = useMemo(
+		() => ({
+			player: gameState.player,
+			npcs: gameState.npcs,
+			enemies: gameState.enemies,
+			treasures: gameState.treasures,
+			mapMode: gameState.mapMode,
+			currentLayout: gameState.currentLayout,
+			gameMessage: gameState.gameMessage,
+			setPlayer: gameState.setPlayer,
+			setNpcs: gameState.setNpcs,
+			setEnemies: gameState.setEnemies,
+			setTreasures: gameState.setTreasures,
+			setMapMode: gameState.setMapMode,
+			setCurrentLayout: gameState.setCurrentLayout,
+			setGameMessage: gameState.setGameMessage,
+		}),
+		[gameState]
+	);
 
-		// State setters
-		setPlayer: gameState.setPlayer,
-		setNpcs: gameState.setNpcs,
-		setEnemies: gameState.setEnemies,
-		setTreasures: gameState.setTreasures,
-		setMapMode: gameState.setMapMode,
-		setCurrentLayout: gameState.setCurrentLayout,
-		setGameMessage: gameState.setGameMessage,
-	});
+	const saveSystem = useSaveSystem(saveSystemProps);
 
-	// ✨ Use extracted game systems (enhanced with emotion context)
-	const combat = useCombatSystem({
-		player: gameState.player,
-		enemies: gameState.enemies,
-		setPlayer: gameState.setPlayer,
-		setEnemies: gameState.setEnemies,
-		setGameMessage: gameState.setGameMessage,
-	});
+	// Combat system with memoized props
+	const combatProps = useMemo(
+		() => ({
+			player: gameState.player,
+			enemies: gameState.enemies,
+			setPlayer: gameState.setPlayer,
+			setEnemies: gameState.setEnemies,
+			setGameMessage: gameState.setGameMessage,
+		}),
+		[
+			gameState.player,
+			gameState.enemies,
+			gameState.setPlayer,
+			gameState.setEnemies,
+			gameState.setGameMessage,
+		]
+	);
 
-	const trading = useTradingSystem({
-		player: gameState.player,
-		setPlayer: gameState.setPlayer,
-		setGameMessage: gameState.setGameMessage,
-	});
+	const combat = useCombatSystem(combatProps);
 
-	const treasure = useTreasureSystem({
-		setPlayer: gameState.setPlayer,
-		setTreasures: gameState.setTreasures,
-		setGameMessage: gameState.setGameMessage,
-	});
+	// Trading system with memoized props
+	const tradingProps = useMemo(
+		() => ({
+			player: gameState.player,
+			setPlayer: gameState.setPlayer,
+			setGameMessage: gameState.setGameMessage,
+		}),
+		[gameState.player, gameState.setPlayer, gameState.setGameMessage]
+	);
 
+	const trading = useTradingSystem(tradingProps);
+
+	// Treasure system with memoized props
+	const treasureProps = useMemo(
+		() => ({
+			setPlayer: gameState.setPlayer,
+			setTreasures: gameState.setTreasures,
+			setGameMessage: gameState.setGameMessage,
+		}),
+		[gameState.setPlayer, gameState.setTreasures, gameState.setGameMessage]
+	);
+
+	const treasure = useTreasureSystem(treasureProps);
+
+	// Map generation (stable)
 	const mapGeneration = useMapGeneration({
 		canvasWidth: CANVAS_WIDTH,
 		canvasHeight: CANVAS_HEIGHT,
 	});
 
-	// ✨ Use extracted rendering system
-	const renderer = useGameRenderer({
-		canvasRef,
-		player: gameState.player,
-		npcs: gameState.npcs,
-		enemies: gameState.enemies,
-		treasures: gameState.treasures,
-		canvasWidth: CANVAS_WIDTH,
-		canvasHeight: CANVAS_HEIGHT,
-	});
+	// Renderer with memoized props
+	const rendererProps = useMemo(
+		() => ({
+			canvasRef,
+			player: gameState.player,
+			npcs: gameState.npcs,
+			enemies: gameState.enemies,
+			treasures: gameState.treasures,
+			canvasWidth: CANVAS_WIDTH,
+			canvasHeight: CANVAS_HEIGHT,
+		}),
+		[gameState.player, gameState.npcs, gameState.enemies, gameState.treasures]
+	);
 
-	// ✨ NEW: Create emotion context provider
-	const getEmotionContext = () => ({
-		emotionDescription: emotion.getEmotionDescription(),
-		emotionContext: emotion.getEmotionContext(),
-		isEmotionActive: emotion.isEnabled && emotion.isActive,
-	});
+	const renderer = useGameRenderer(rendererProps);
 
-	// ✨ Use extracted input handling (with emotion context)
-	useInputHandling({
-		player: gameState.player,
-		npcs: gameState.npcs,
-		enemies: gameState.enemies,
-		treasures: gameState.treasures,
-		showInventory: gameState.showInventory,
-		setPlayer: gameState.setPlayer,
-		setShowInventory: gameState.setShowInventory,
-		combat,
-		sendToLLM: trading.sendToLLM,
-		collectTreasure: treasure.collectTreasure,
-		getEmotionContext, // NEW
-		saveActions: {
-			quickSave: saveSystem.quickSave,
-			quickLoad: saveSystem.quickLoad,
-			openSaveLoad: () => setShowSaveLoadModal(true),
-		},
-		canvasWidth: CANVAS_WIDTH,
-		canvasHeight: CANVAS_HEIGHT,
-		playerSize: gameState.player.size,
-	});
+	// Stable emotion context provider
+	const getEmotionContext = useCallback(
+		() => ({
+			emotionDescription: emotion.getEmotionDescription(),
+			emotionContext: emotion.getEmotionContext(),
+			isEmotionActive: emotion.isEnabled && emotion.isActive,
+		}),
+		[
+			emotion.getEmotionDescription,
+			emotion.getEmotionContext,
+			emotion.isEnabled,
+			emotion.isActive,
+		]
+	);
 
-	// ✨ Use extracted game loop
-	useGameLoop(renderer.draw);
+	// Input handling with memoized props
+	const inputProps = useMemo(
+		() => ({
+			player: gameState.player,
+			npcs: gameState.npcs,
+			enemies: gameState.enemies,
+			treasures: gameState.treasures,
+			showInventory: gameState.showInventory,
+			setPlayer: gameState.setPlayer,
+			setShowInventory: gameState.setShowInventory,
+			combat,
+			sendToLLM: trading.sendToLLM,
+			collectTreasure: treasure.collectTreasure,
+			getEmotionContext,
+			saveActions: {
+				quickSave: saveSystem.quickSave,
+				quickLoad: saveSystem.quickLoad,
+				openSaveLoad: () => setShowSaveLoadModal(true),
+			},
+			canvasWidth: CANVAS_WIDTH,
+			canvasHeight: CANVAS_HEIGHT,
+			playerSize: gameState.player.size,
+		}),
+		[
+			gameState.player,
+			gameState.npcs,
+			gameState.enemies,
+			gameState.treasures,
+			gameState.showInventory,
+			gameState.setPlayer,
+			gameState.setShowInventory,
+			combat,
+			trading.sendToLLM,
+			treasure.collectTreasure,
+			getEmotionContext,
+			saveSystem.quickSave,
+			saveSystem.quickLoad,
+		]
+	);
 
-	// ✨ Auto-save every 2 minutes
+	useInputHandling(inputProps);
+
+	// Game loop with stable draw function
+	const stableDraw = useCallback(() => {
+		renderer.draw();
+	}, [renderer.draw]);
+
+	useGameLoop(stableDraw);
+
+	// Auto-save effects (memoized dependencies)
 	useEffect(() => {
 		const autoSaveInterval = setInterval(() => {
 			saveSystem.autoSave();
-		}, 120000); // 2 minutes
+		}, 120000);
 
 		return () => clearInterval(autoSaveInterval);
 	}, [saveSystem.autoSave]);
 
-	// ✨ Auto-save on important events (level up, enemy defeat, treasure collection)
 	useEffect(() => {
 		if (gameInitialized) {
 			saveSystem.autoSave();
@@ -155,20 +243,74 @@ export default function GameCanvas() {
 		saveSystem.autoSave,
 	]);
 
-	// ✨ Auto-load last save state on component mount (page refresh)
+	// Stable event handlers
+	const handleGenerateMap = useCallback(() => {
+		const result = mapGeneration.generateMap(
+			gameState.mapMode,
+			gameState.currentLayout
+		);
+
+		gameState.setNpcs(result.npcs);
+		gameState.setEnemies(result.enemies);
+		gameState.setTreasures(result.treasures);
+		gameState.setPlayer((prev) => ({
+			...prev,
+			x: result.playerSpawn.x,
+			y: result.playerSpawn.y,
+		}));
+
+		setTimeout(() => {
+			if (gameInitialized) {
+				saveSystem.autoSave();
+			}
+		}, 500);
+	}, [mapGeneration, gameState, gameInitialized, saveSystem.autoSave]);
+
+	const handleNewGame = useCallback(() => {
+		gameState.setPlayer({
+			x: 50,
+			y: 250,
+			size: 20,
+			health: 100,
+			maxHealth: 100,
+			experience: 0,
+			level: 1,
+			inventory: [],
+			gold: 50,
+		});
+
+		const result = mapGeneration.generateMap(
+			gameState.mapMode,
+			gameState.currentLayout
+		);
+
+		gameState.setNpcs(result.npcs);
+		gameState.setEnemies(result.enemies);
+		gameState.setTreasures(result.treasures);
+		gameState.setPlayer((prev) => ({
+			...prev,
+			x: result.playerSpawn.x,
+			y: result.playerSpawn.y,
+		}));
+
+		gameState.setGameMessage("New game started!");
+		setTimeout(() => gameState.setGameMessage(""), 3000);
+
+		setTimeout(() => {
+			if (gameInitialized) {
+				saveSystem.autoSave();
+			}
+		}, 500);
+	}, [gameState, mapGeneration, gameInitialized, saveSystem.autoSave]);
+
+	// Initialization effect (only runs once)
 	useEffect(() => {
 		const initializeGame = async () => {
-			// Small delay to ensure all systems are ready
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
-			// Try to load the most recent save state
-			const loaded = saveSystem.loadLastSaveState(true); // silent = true for initial load
+			const loaded = saveSystem.loadLastSaveState(true);
 
-			if (loaded) {
-				console.log("Game state restored from previous session");
-			} else {
-				console.log("Starting new game - no previous save found");
-				// Generate initial map if no save was loaded
+			if (!loaded) {
 				const result = mapGeneration.generateMap(
 					gameState.mapMode,
 					gameState.currentLayout
@@ -188,9 +330,9 @@ export default function GameCanvas() {
 		};
 
 		initializeGame();
-	}, []); // Only run once on mount
+	}, []); // Empty dependency array - only run once
 
-	// ✨ Auto-save before page unload (when user closes tab/refreshes)
+	// Before unload effect
 	useEffect(() => {
 		const handleBeforeUnload = () => {
 			if (gameInitialized) {
@@ -202,74 +344,14 @@ export default function GameCanvas() {
 		return () => window.removeEventListener("beforeunload", handleBeforeUnload);
 	}, [gameInitialized, saveSystem.autoSave]);
 
-	// ✨ Simplified map initialization (now only used for manual generation)
-	const handleGenerateMap = () => {
-		const result = mapGeneration.generateMap(
-			gameState.mapMode,
-			gameState.currentLayout
-		);
-
-		gameState.setNpcs(result.npcs);
-		gameState.setEnemies(result.enemies);
-		gameState.setTreasures(result.treasures);
-		gameState.setPlayer((prev) => ({
-			...prev,
-			x: result.playerSpawn.x,
-			y: result.playerSpawn.y,
-		}));
-
-		// Auto-save after generating new map
-		setTimeout(() => {
-			if (gameInitialized) {
-				saveSystem.autoSave();
-			}
-		}, 500);
-	};
-
-	// ✨ Start completely fresh game
-	const handleNewGame = () => {
-		// Reset to initial game state
-		gameState.setPlayer({
-			x: 50,
-			y: 250,
-			size: 20,
-			health: 100,
-			maxHealth: 100,
-			experience: 0,
-			level: 1,
-			inventory: [],
-			gold: 50,
-		});
-
-		// Generate fresh map
-		const result = mapGeneration.generateMap(
-			gameState.mapMode,
-			gameState.currentLayout
-		);
-
-		gameState.setNpcs(result.npcs);
-		gameState.setEnemies(result.enemies);
-		gameState.setTreasures(result.treasures);
-		gameState.setPlayer((prev) => ({
-			...prev,
-			x: result.playerSpawn.x,
-			y: result.playerSpawn.y,
-		}));
-
-		gameState.setGameMessage("New game started!");
-		setTimeout(() => gameState.setGameMessage(""), 3000);
-
-		// Auto-save the new game state
-		setTimeout(() => {
-			if (gameInitialized) {
-				saveSystem.autoSave();
-			}
-		}, 500);
-	};
+	// Memoized combat attack handler
+	const handleCombatAttack = useCallback(() => {
+		combat.attack(getEmotionContext());
+	}, [combat.attack, getEmotionContext]);
 
 	return (
 		<div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-			{/* ✨ Enhanced Map Controls with Emotion Controls */}
+			{/* Map Controls */}
 			<div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
 				<div style={{ flex: 1 }}>
 					<MapControls
@@ -283,7 +365,7 @@ export default function GameCanvas() {
 					/>
 				</div>
 
-				{/* ✨ NEW: Emotion Detection Controls */}
+				{/* Emotion Detection Controls */}
 				<div
 					style={{
 						background: "#f0f0f0",
@@ -308,7 +390,6 @@ export default function GameCanvas() {
 						onTogglePreview={() => setShowCameraPreview(!showCameraPreview)}
 					/>
 
-					{/* TEMP: Debug Test Button */}
 					<button
 						onClick={() => setShowDebugTest(true)}
 						style={{
@@ -339,22 +420,20 @@ export default function GameCanvas() {
 					style={{ border: "2px solid #333", backgroundColor: "#2d5016" }}
 				/>
 
-				{/* ✨ All UI components */}
-				<PlayerStats
+				{/* Memoized UI Components */}
+				<MemoizedPlayerStats
 					player={gameState.player}
 					mapMode={gameState.mapMode}
 					currentLayout={gameState.currentLayout}
 				/>
 
-				{/* ✨ NEW: Emotion Indicator (always rendered if enabled) */}
-				<EmotionIndicator
+				<MemoizedEmotionIndicator
 					emotion={emotion.currentEmotion}
 					isActive={emotion.isActive}
 					isEnabled={emotion.isEnabled}
 					error={emotion.error}
 				/>
 
-				{/* ✨ NEW: Camera Preview (debug feature) */}
 				{showCameraPreview && (
 					<EmotionCameraPreview
 						videoElement={emotion.getVideoElement()}
@@ -368,20 +447,19 @@ export default function GameCanvas() {
 				<CombatModal
 					inCombat={combat.inCombat}
 					enemyTalking={combat.enemyTalking}
-					onAttack={() => combat.attack(getEmotionContext())}
+					onAttack={handleCombatAttack}
 					onFlee={combat.flee}
 				/>
 
-				<InventoryPanel
+				<MemoizedInventoryPanel
 					player={gameState.player}
 					showInventory={gameState.showInventory}
 				/>
 
 				<GameMessages gameMessage={gameState.gameMessage} />
 
-				<ControlsHelp />
+				<MemoizedControlsHelp />
 
-				{/* ✨ Save/Load Modal */}
 				<SaveLoadModal
 					isOpen={showSaveLoadModal}
 					onClose={() => setShowSaveLoadModal(false)}
@@ -397,7 +475,7 @@ export default function GameCanvas() {
 					onImport={saveSystem.importSave}
 				/>
 
-				{/* ✨ NEW: Error notification for emotion detection */}
+				{/* Error notification */}
 				{emotion.error && (
 					<div
 						style={{
@@ -435,49 +513,7 @@ export default function GameCanvas() {
 				)}
 			</div>
 
-			{/* ✨ NEW: Development Info (only in dev mode) */}
-			{process.env.NODE_ENV === "development" && emotion.currentEmotion && (
-				<div
-					style={{
-						marginTop: "20px",
-						padding: "15px",
-						background: "#f5f5f5",
-						borderRadius: "8px",
-						border: "2px solid #333",
-						fontSize: "12px",
-						fontFamily: "monospace",
-					}}
-				>
-					<strong>🔬 Emotion Debug Info:</strong>
-					<br />
-					<strong>Primary:</strong> {emotion.currentEmotion.primary} (
-					{Math.round(emotion.currentEmotion.confidence * 100)}%)
-					<br />
-					<strong>Context:</strong> "{emotion.getEmotionContext()}"
-					<br />
-					<strong>Description:</strong> "{emotion.getEmotionDescription()}"
-					<br />
-					<strong>All Emotions:</strong>
-					<div
-						style={{
-							marginTop: "5px",
-							display: "grid",
-							gridTemplateColumns: "1fr 1fr 1fr",
-							gap: "10px",
-						}}
-					>
-						{Object.entries(emotion.currentEmotion.allEmotions).map(
-							([name, score]) => (
-								<div key={name}>
-									{name}: {Math.round(score * 100)}%
-								</div>
-							)
-						)}
-					</div>
-				</div>
-			)}
-
-			{/* TEMP: Debug Test Modal */}
+			{/* Debug Test Modal */}
 			{showDebugTest && (
 				<div>
 					<EmotionDebugTest />
