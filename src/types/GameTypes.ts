@@ -1,5 +1,6 @@
+
 // ===== types/GameTypes.ts =====
-export interface Player {
+export type Player = {
 	x: number;
 	y: number;
 	size: number;
@@ -11,7 +12,7 @@ export interface Player {
 	gold: number;
 }
 
-export interface NPC {
+export type NPC = {
 	id: string;
 	x: number;
 	y: number;
@@ -23,7 +24,7 @@ export interface NPC {
 	type: string;
 }
 
-export interface Enemy {
+export type Enemy = {
 	id: string;
 	x: number;
 	y: number;
@@ -38,7 +39,7 @@ export interface Enemy {
 	defeated: boolean;
 }
 
-export interface Treasure {
+export type Treasure = {
 	id: string;
 	x: number;
 	y: number;
@@ -47,6 +48,36 @@ export interface Treasure {
 	collected: boolean;
 }
 
-export interface ItemPrice {
+export type ItemPrice = {
 	[key: string]: number;
 }
+
+// ===== LAYOUT TYPES =====
+export type NamedPosition = {
+	x: number;
+	y: number;
+}
+
+export type SpawnZone = {
+	minX: number;
+	maxX: number;
+	minY: number;
+	maxY: number;
+	avoid: string[]; // Named positions to avoid
+}
+
+export type EntityPlacement = {
+	id: string;
+	position?: string | NamedPosition; // Named position or coordinates
+	zone?: string; // Spawn zone for random placement
+}
+
+export type GameLayout = {
+	name: string;
+	playerSpawn: NamedPosition;
+	npcs: EntityPlacement[];
+	enemies: EntityPlacement[];
+	treasures: EntityPlacement[];
+}
+
+export type MapMode = 'procedural' | 'configuration';

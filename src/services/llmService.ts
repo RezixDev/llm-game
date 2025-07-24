@@ -1,5 +1,5 @@
 // ===== services/llmService.ts =====
-import type { Player, Enemy } from '../types/GameTypes';
+import type { Player, Enemy } from '@/types/GameTypes';
 
 // Use import.meta.env for Vite or fallback to default values
 const API_URL = import.meta.env.VITE_LLM_API_URL;

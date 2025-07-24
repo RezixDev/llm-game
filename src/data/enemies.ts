@@ -1,5 +1,5 @@
 // ===== data/enemies.ts =====
-import type { Enemy } from '../types/GameTypes';
+import type { Enemy } from '@/types/GameTypes';
 
 export const ENEMY_SIZE = 15;
 
@@ -85,3 +85,88 @@ export const enemiesData: Enemy[] = [
 		defeated: false,
 	},
 ];
+
+// Enemies without hardcoded positions
+export const enemyTemplates: Omit<Enemy, 'x' | 'y'>[] = [
+  {
+    id: "goblin1",
+    size: ENEMY_SIZE,
+    health: 30,
+    maxHealth: 30,
+    damage: 10,
+    color: "red",
+    name: "Snarky Goblin",
+    personality: "sarcastic and cowardly",
+    battleCries: [
+      "You think you can defeat me, weakling?",
+      "I've seen stronger butterflies!",
+      "My grandmother hits harder than you!",
+      "Is that all you've got?",
+      "You're making this too easy!",
+    ],
+    defeated: false,
+  },
+  {
+    id: "orc1",
+    size: ENEMY_SIZE,
+    health: 50,
+    maxHealth: 50,
+    damage: 15,
+    color: "darkred",
+    name: "Brutal Orc",
+    personality: "aggressive and proud warrior",
+    battleCries: [
+      "FOR THE HORDE! You will fall before my might!",
+      "Your bones will make excellent decorations!",
+      "I feast on the fear of weaklings like you!",
+      "You dare challenge an orc warrior?!",
+      "Blood and glory! FIGHT ME!",
+    ],
+    defeated: false,
+  },
+  {
+    id: "skeleton1",
+    size: ENEMY_SIZE,
+    health: 25,
+    maxHealth: 25,
+    damage: 8,
+    color: "lightgray",
+    name: "Melancholy Skeleton",
+    personality: "sad and philosophical undead",
+    battleCries: [
+      "*sigh* Another fight... why must we do this?",
+      "In death, I find no peace, only endless conflict...",
+      "We are all bones beneath the flesh, friend.",
+      "Fighting is so tiresome... but I must persist.",
+      "Do you ever wonder what lies beyond this existence?",
+    ],
+    defeated: false,
+  },
+  {
+    id: "troll1",
+    size: ENEMY_SIZE,
+    health: 80,
+    maxHealth: 80,
+    damage: 20,
+    color: "darkgreen",
+    name: "Dim-witted Troll",
+    personality: "simple-minded but surprisingly wise",
+    battleCries: [
+      "Troll smash! But... why we fight again?",
+      "Me strong! You... you okay little person?",
+      "Troll confused. Fighting make head hurt.",
+      "Maybe we be friends after? Troll lonely.",
+      "Big stick go BONK! Sorry in advance!",
+    ],
+    defeated: false,
+  },
+];
+
+// Factory function to create positioned enemies
+export const createEnemiesFromLayout = (positions: Record<string, { x: number; y: number }>): Enemy[] => {
+  return enemyTemplates.map(template => ({
+    ...template,
+    x: positions[template.id]?.x || 0,
+    y: positions[template.id]?.y || 0,
+  }));
+};
