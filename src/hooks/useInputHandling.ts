@@ -1,6 +1,7 @@
-// ===== hooks/useInputHandling.ts (Updated) =====
+// ===== hooks/useInputHandling.ts (Enhanced with Emotion Context) =====
 import { useEffect } from 'react';
 import type { Player, NPC, Enemy, Treasure } from '@/types/GameTypes';
+import type { EmotionContext } from '@/services/llmService';
 import { isNearEntity } from '@/utils/gameUtils';
 
 interface InputHandlingProps {
@@ -15,20 +16,23 @@ interface InputHandlingProps {
   setPlayer: React.Dispatch<React.SetStateAction<Player>>;
   setShowInventory: React.Dispatch<React.SetStateAction<boolean>>;
   
-  // Game actions
+  // Game actions (enhanced with emotion context)
   combat: {
     inCombat: Enemy | null;
     enemyTalking: boolean;
-    attack: () => void;
+    attack: (emotionContext?: EmotionContext) => void;
     flee: () => void;
-    startCombat: (enemy: Enemy) => Promise<void>;
+    startCombat: (enemy: Enemy, emotionContext?: EmotionContext) => Promise<void>;
   };
   
-  // Other actions
-  sendToLLM: (userInput: string, npcName: string, npcType?: string) => Promise<void>;
+  // Other actions (enhanced with emotion context)
+  sendToLLM: (userInput: string, npcName: string, npcType?: string, emotionContext?: EmotionContext) => Promise<void>;
   collectTreasure: (treasure: Treasure) => void;
   
-  // Save system actions (NEW)
+  // Emotion context provider
+  getEmotionContext: () => EmotionContext;
+  
+  // Save system actions
   saveActions: {
     quickSave: () => boolean;
     quickLoad: () => boolean;
@@ -52,6 +56,7 @@ export const useInputHandling = ({
   combat,
   sendToLLM,
   collectTreasure,
+  getEmotionContext,
   saveActions,
   canvasWidth = 800,
   canvasHeight = 600,
@@ -60,6 +65,9 @@ export const useInputHandling = ({
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Get current emotion context for all interactions
+      const emotionContext = getEmotionContext();
+
       // Save/Load hotkeys (F5 = Quick Save, F9 = Quick Load, ESC = Save Menu)
       if (e.key === "F5") {
         e.preventDefault();
@@ -79,10 +87,10 @@ export const useInputHandling = ({
         return;
       }
 
-      // Combat input handling
+      // Combat input handling (with emotion context)
       if (combat.inCombat && (e.key === "1" || e.key === "2")) {
         if (e.key === "1" && !combat.enemyTalking) {
-          combat.attack();
+          combat.attack(emotionContext);
         }
         if (e.key === "2") {
           combat.flee();
@@ -117,7 +125,7 @@ export const useInputHandling = ({
         setPlayer((prev) => ({ ...prev, x: newX, y: newY }));
       }
 
-      // NPC interaction (Space)
+      // NPC interaction (Space) - with emotion context
       if (e.key === " ") {
         const nearbyNPC = npcs.find((npc) =>
           isNearEntity(player.x, player.y, npc.x, npc.y)
@@ -125,12 +133,12 @@ export const useInputHandling = ({
         if (nearbyNPC) {
           const userInput = prompt(`Talk to ${nearbyNPC.name}:`);
           if (userInput) {
-            sendToLLM(userInput, nearbyNPC.name, nearbyNPC.type);
+            sendToLLM(userInput, nearbyNPC.name, nearbyNPC.type, emotionContext);
           }
         }
       }
 
-      // Combat initiation (F)
+      // Combat initiation (F) - with emotion context
       if (e.key === "f" || e.key === "F") {
         const nearbyEnemy = enemies.find(
           (enemy) =>
@@ -138,7 +146,7 @@ export const useInputHandling = ({
             isNearEntity(player.x, player.y, enemy.x, enemy.y, 40)
         );
         if (nearbyEnemy && !combat.inCombat) {
-          combat.startCombat(nearbyEnemy);
+          combat.startCombat(nearbyEnemy, emotionContext);
         }
       }
 
@@ -173,6 +181,7 @@ export const useInputHandling = ({
     setShowInventory,
     sendToLLM,
     collectTreasure,
+    getEmotionContext,
     saveActions,
     canvasWidth,
     canvasHeight,

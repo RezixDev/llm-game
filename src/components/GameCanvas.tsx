@@ -1,7 +1,7 @@
-// ===== Updated GameCanvas.tsx with Save System =====
+// ===== components/GameCanvas.tsx (Enhanced with Full Emotion Detection) =====
 import { useRef, useState, useEffect } from "react";
 
-// ✨ Import all our extracted systems (including new save system)
+// ✨ Import all our systems (including emotion detection)
 import { useGameState } from "@/hooks/useGameState";
 import { useCombatSystem } from "@/hooks/useCombatSystem";
 import { useTradingSystem } from "@/hooks/useTradingSystem";
@@ -10,16 +10,19 @@ import { useInputHandling } from "@/hooks/useInputHandling";
 import { useGameRenderer } from "@/hooks/useGameRenderer";
 import { useGameLoop } from "@/hooks/useGameLoop";
 import { useMapGeneration } from "@/hooks/useMapGeneration";
-import { useSaveSystem } from "@/hooks/useSaveSystem"; // NEW
+import { useSaveSystem } from "@/hooks/useSaveSystem";
+import { useEmotionDetection } from "@/hooks/useEmotionDetection"; // NEW
 
-// ✨ Import all UI components (including new save modal)
+// ✨ Import all UI components (including emotion components)
 import { MapControls } from "@/components/GameUI/MapControls";
 import { CombatModal } from "@/components/GameUI/CombatModal";
 import { InventoryPanel } from "@/components/GameUI/InventoryPanel";
 import { PlayerStats } from "@/components/GameUI/PlayerStats";
 import { ControlsHelp } from "@/components/GameUI/ControlsHelp";
 import { GameMessages } from "@/components/GameUI/GameMessages";
-import { SaveLoadModal } from "@/components/GameUI/SaveLoadModal"; // NEW
+import { SaveLoadModal } from "@/components/GameUI/SaveLoadModal";
+import { EmotionIndicator } from "@/components/GameUI/EmotionIndicator"; // NEW
+import { EmotionControls } from "@/components/GameUI/EmotionControls"; // NEW
 
 // Game constants
 const CANVAS_WIDTH = 800;
@@ -28,12 +31,15 @@ const CANVAS_HEIGHT = 600;
 export default function GameCanvas() {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
-	const [gameInitialized, setGameInitialized] = useState(false); // NEW
+	const [gameInitialized, setGameInitialized] = useState(false);
 
 	// ✨ Use extracted game state management
 	const gameState = useGameState();
 
-	// ✨ NEW: Initialize save system
+	// ✨ NEW: Initialize emotion detection system
+	const emotion = useEmotionDetection();
+
+	// ✨ Initialize save system
 	const saveSystem = useSaveSystem({
 		// Current game state
 		player: gameState.player,
@@ -54,7 +60,7 @@ export default function GameCanvas() {
 		setGameMessage: gameState.setGameMessage,
 	});
 
-	// ✨ Use extracted game systems
+	// ✨ Use extracted game systems (enhanced with emotion context)
 	const combat = useCombatSystem({
 		player: gameState.player,
 		enemies: gameState.enemies,
@@ -91,7 +97,14 @@ export default function GameCanvas() {
 		canvasHeight: CANVAS_HEIGHT,
 	});
 
-	// ✨ Use extracted input handling (updated with save actions)
+	// ✨ NEW: Create emotion context provider
+	const getEmotionContext = () => ({
+		emotionDescription: emotion.getEmotionDescription(),
+		emotionContext: emotion.getEmotionContext(),
+		isEmotionActive: emotion.isEnabled && emotion.isActive,
+	});
+
+	// ✨ Use extracted input handling (with emotion context)
 	useInputHandling({
 		player: gameState.player,
 		npcs: gameState.npcs,
@@ -103,6 +116,7 @@ export default function GameCanvas() {
 		combat,
 		sendToLLM: trading.sendToLLM,
 		collectTreasure: treasure.collectTreasure,
+		getEmotionContext, // NEW
 		saveActions: {
 			quickSave: saveSystem.quickSave,
 			quickLoad: saveSystem.quickLoad,
@@ -137,7 +151,7 @@ export default function GameCanvas() {
 		saveSystem.autoSave,
 	]);
 
-	// ✨ NEW: Auto-load last save state on component mount (page refresh)
+	// ✨ Auto-load last save state on component mount (page refresh)
 	useEffect(() => {
 		const initializeGame = async () => {
 			// Small delay to ensure all systems are ready
@@ -208,7 +222,7 @@ export default function GameCanvas() {
 		}, 500);
 	};
 
-	// ✨ NEW: Start completely fresh game
+	// ✨ Start completely fresh game
 	const handleNewGame = () => {
 		// Reset to initial game state
 		gameState.setPlayer({
@@ -251,16 +265,44 @@ export default function GameCanvas() {
 
 	return (
 		<div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-			{/* ✨ Updated Map Controls with Save Button and New Game */}
-			<MapControls
-				mapMode={gameState.mapMode}
-				currentLayout={gameState.currentLayout}
-				onMapModeChange={gameState.setMapMode}
-				onLayoutChange={gameState.setCurrentLayout}
-				onGenerateMap={handleGenerateMap}
-				onOpenSaveLoad={() => setShowSaveLoadModal(true)}
-				onNewGame={handleNewGame}
-			/>
+			{/* ✨ Enhanced Map Controls with Emotion Controls */}
+			<div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
+				<div style={{ flex: 1 }}>
+					<MapControls
+						mapMode={gameState.mapMode}
+						currentLayout={gameState.currentLayout}
+						onMapModeChange={gameState.setMapMode}
+						onLayoutChange={gameState.setCurrentLayout}
+						onGenerateMap={handleGenerateMap}
+						onOpenSaveLoad={() => setShowSaveLoadModal(true)}
+						onNewGame={handleNewGame}
+					/>
+				</div>
+
+				{/* ✨ NEW: Emotion Detection Controls */}
+				<div
+					style={{
+						background: "#f0f0f0",
+						border: "2px solid #333",
+						borderRadius: "8px",
+						padding: "15px",
+					}}
+				>
+					<strong style={{ marginBottom: "10px", display: "block" }}>
+						🎭 Emotion Detection
+					</strong>
+					<EmotionControls
+						isEnabled={emotion.isEnabled}
+						isLoading={emotion.isLoading}
+						isActive={emotion.isActive}
+						hasCamera={emotion.hasCamera}
+						hasPermission={emotion.hasPermission}
+						error={emotion.error}
+						onToggle={emotion.toggleDetection}
+						onClearError={emotion.clearError}
+					/>
+				</div>
+			</div>
 
 			{/* Game Container */}
 			<div
@@ -281,10 +323,18 @@ export default function GameCanvas() {
 					currentLayout={gameState.currentLayout}
 				/>
 
+				{/* ✨ NEW: Emotion Indicator (always rendered if enabled) */}
+				<EmotionIndicator
+					emotion={emotion.currentEmotion}
+					isActive={emotion.isActive}
+					isEnabled={emotion.isEnabled}
+					error={emotion.error}
+				/>
+
 				<CombatModal
 					inCombat={combat.inCombat}
 					enemyTalking={combat.enemyTalking}
-					onAttack={combat.attack}
+					onAttack={() => combat.attack(getEmotionContext())}
 					onFlee={combat.flee}
 				/>
 
@@ -297,7 +347,7 @@ export default function GameCanvas() {
 
 				<ControlsHelp />
 
-				{/* ✨ NEW: Save/Load Modal */}
+				{/* ✨ Save/Load Modal */}
 				<SaveLoadModal
 					isOpen={showSaveLoadModal}
 					onClose={() => setShowSaveLoadModal(false)}
@@ -312,7 +362,86 @@ export default function GameCanvas() {
 					onExport={saveSystem.exportSave}
 					onImport={saveSystem.importSave}
 				/>
+
+				{/* ✨ NEW: Error notification for emotion detection */}
+				{emotion.error && (
+					<div
+						style={{
+							position: "absolute",
+							top: "10px",
+							right: "10px",
+							background: "rgba(244, 67, 54, 0.9)",
+							color: "white",
+							padding: "10px",
+							borderRadius: "5px",
+							fontSize: "12px",
+							zIndex: 200,
+							maxWidth: "200px",
+						}}
+					>
+						<strong>Emotion Detection Error:</strong>
+						<br />
+						{emotion.error}
+						<button
+							onClick={emotion.clearError}
+							style={{
+								marginTop: "5px",
+								padding: "2px 6px",
+								background: "white",
+								color: "#F44336",
+								border: "none",
+								borderRadius: "3px",
+								fontSize: "10px",
+								cursor: "pointer",
+							}}
+						>
+							Dismiss
+						</button>
+					</div>
+				)}
 			</div>
+
+			{/* ✨ NEW: Development Info (only in dev mode) */}
+			{process.env.NODE_ENV === "development" && emotion.currentEmotion && (
+				<div
+					style={{
+						marginTop: "20px",
+						padding: "15px",
+						background: "#f5f5f5",
+						borderRadius: "8px",
+						border: "2px solid #333",
+						fontSize: "12px",
+						fontFamily: "monospace",
+					}}
+				>
+					<strong>🔬 Emotion Debug Info:</strong>
+					<br />
+					<strong>Primary:</strong> {emotion.currentEmotion.primary} (
+					{Math.round(emotion.currentEmotion.confidence * 100)}%)
+					<br />
+					<strong>Context:</strong> "{emotion.getEmotionContext()}"
+					<br />
+					<strong>Description:</strong> "{emotion.getEmotionDescription()}"
+					<br />
+					<strong>All Emotions:</strong>
+					<div
+						style={{
+							marginTop: "5px",
+							display: "grid",
+							gridTemplateColumns: "1fr 1fr 1fr",
+							gap: "10px",
+						}}
+					>
+						{Object.entries(emotion.currentEmotion.allEmotions).map(
+							([name, score]) => (
+								<div key={name}>
+									{name}: {Math.round(score * 100)}%
+								</div>
+							)
+						)}
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }
