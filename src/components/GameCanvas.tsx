@@ -23,6 +23,8 @@ import { GameMessages } from "@/components/GameUI/GameMessages";
 import { SaveLoadModal } from "@/components/GameUI/SaveLoadModal";
 import { EmotionIndicator } from "@/components/GameUI/EmotionIndicator"; // NEW
 import { EmotionControls } from "@/components/GameUI/EmotionControls"; // NEW
+import { EmotionCameraPreview } from "@/components/GameUI/EmotionCameraPreview"; // NEW
+import { EmotionDebugTest } from "@/components/GameUI/EmotionDebugTest"; // TEMP DEBUG
 
 // Game constants
 const CANVAS_WIDTH = 800;
@@ -32,6 +34,8 @@ export default function GameCanvas() {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
 	const [gameInitialized, setGameInitialized] = useState(false);
+	const [showCameraPreview, setShowCameraPreview] = useState(false);
+	const [showDebugTest, setShowDebugTest] = useState(false); // TEMP DEBUG
 
 	// ✨ Use extracted game state management
 	const gameState = useGameState();
@@ -300,7 +304,26 @@ export default function GameCanvas() {
 						error={emotion.error}
 						onToggle={emotion.toggleDetection}
 						onClearError={emotion.clearError}
+						showPreview={showCameraPreview}
+						onTogglePreview={() => setShowCameraPreview(!showCameraPreview)}
 					/>
+
+					{/* TEMP: Debug Test Button */}
+					<button
+						onClick={() => setShowDebugTest(true)}
+						style={{
+							marginTop: "10px",
+							padding: "6px 12px",
+							backgroundColor: "#FF5722",
+							color: "white",
+							border: "none",
+							borderRadius: "4px",
+							cursor: "pointer",
+							fontSize: "11px",
+						}}
+					>
+						🔬 Debug Test
+					</button>
 				</div>
 			</div>
 
@@ -330,6 +353,17 @@ export default function GameCanvas() {
 					isEnabled={emotion.isEnabled}
 					error={emotion.error}
 				/>
+
+				{/* ✨ NEW: Camera Preview (debug feature) */}
+				{showCameraPreview && (
+					<EmotionCameraPreview
+						videoElement={emotion.getVideoElement()}
+						isActive={emotion.isActive}
+						isEnabled={emotion.isEnabled}
+						currentEmotion={emotion.currentEmotion}
+						onClose={() => setShowCameraPreview(false)}
+					/>
+				)}
 
 				<CombatModal
 					inCombat={combat.inCombat}
@@ -440,6 +474,30 @@ export default function GameCanvas() {
 							)
 						)}
 					</div>
+				</div>
+			)}
+
+			{/* TEMP: Debug Test Modal */}
+			{showDebugTest && (
+				<div>
+					<EmotionDebugTest />
+					<button
+						onClick={() => setShowDebugTest(false)}
+						style={{
+							position: "fixed",
+							top: "10px",
+							right: "10px",
+							zIndex: 10000,
+							padding: "10px",
+							backgroundColor: "#f44336",
+							color: "white",
+							border: "none",
+							borderRadius: "5px",
+							cursor: "pointer",
+						}}
+					>
+						Close Debug
+					</button>
 				</div>
 			)}
 		</div>

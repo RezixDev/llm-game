@@ -10,6 +10,8 @@ interface EmotionControlsProps {
 	error: string | null;
 	onToggle: () => Promise<void>;
 	onClearError: () => void;
+	showPreview: boolean;
+	onTogglePreview: () => void;
 }
 
 export const EmotionControls: React.FC<EmotionControlsProps> = ({
@@ -21,6 +23,8 @@ export const EmotionControls: React.FC<EmotionControlsProps> = ({
 	error,
 	onToggle,
 	onClearError,
+	showPreview,
+	onTogglePreview,
 }) => {
 	const getButtonStyle = () => {
 		const baseStyle = {
@@ -124,6 +128,28 @@ export const EmotionControls: React.FC<EmotionControlsProps> = ({
 				{getButtonText()}
 			</button>
 
+			{/* Camera preview toggle button */}
+			{isEnabled && isActive && (
+				<button
+					onClick={onTogglePreview}
+					style={{
+						padding: "6px 12px",
+						backgroundColor: showPreview ? "#FF9800" : "#607D8B",
+						color: "white",
+						border: "none",
+						borderRadius: "4px",
+						cursor: "pointer",
+						fontSize: "11px",
+						display: "flex",
+						alignItems: "center",
+						gap: "4px",
+					}}
+					title={showPreview ? "Hide camera preview" : "Show camera preview"}
+				>
+					📹 {showPreview ? "Hide Preview" : "Show Preview"}
+				</button>
+			)}
+
 			{/* Status and error display */}
 			{(error || hasPermission === false || !hasCamera) && (
 				<div
@@ -195,17 +221,12 @@ export const EmotionControls: React.FC<EmotionControlsProps> = ({
 			)}
 
 			{/* CSS for pulse animation */}
-			<style jsx>{`
-				@keyframes pulse {
-					0%,
-					100% {
-						opacity: 1;
-					}
-					50% {
-						opacity: 0.3;
-					}
-				}
-			`}</style>
+			<style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
+      `}</style>
 		</div>
 	);
 };

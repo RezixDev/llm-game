@@ -69,7 +69,9 @@ export const useEmotionDetection = () => {
     try {
       const service = serviceRef.current;
       
-      // Start detection
+      console.log('🚀 Starting emotion detection from hook...');
+      
+      // Start detection with proper async handling
       await service.startDetection(handleEmotionUpdate);
       
       setState(prev => ({ 
@@ -80,15 +82,15 @@ export const useEmotionDetection = () => {
         hasPermission: true,
       }));
 
-      console.log('Emotion detection enabled successfully');
+      console.log('✅ Emotion detection enabled successfully from hook');
     } catch (error: any) {
-      console.error('Failed to enable emotion detection:', error);
+      console.error('❌ Failed to enable emotion detection:', error);
       
       let errorMessage = 'Failed to start emotion detection';
       if (error.message.includes('camera') || error.message.includes('Camera')) {
         errorMessage = 'Camera access denied or unavailable';
         setState(prev => ({ ...prev, hasPermission: false }));
-      } else if (error.message.includes('models')) {
+      } else if (error.message.includes('models') || error.message.includes('Model')) {
         errorMessage = 'Failed to load emotion detection models';
       }
 
@@ -157,7 +159,14 @@ export const useEmotionDetection = () => {
   }, [state.isEnabled, state.currentEmotion]);
 
   const getVideoElement = useCallback((): HTMLVideoElement | null => {
-    return serviceRef.current.getVideoElement();
+    const videoElement = serviceRef.current.getVideoElement();
+    console.log('🎥 Video element request:', {
+      exists: !!videoElement,
+      dimensions: videoElement ? `${videoElement.videoWidth}x${videoElement.videoHeight}` : 'N/A',
+      readyState: videoElement?.readyState,
+      srcObject: !!videoElement?.srcObject
+    });
+    return videoElement;
   }, []);
 
   return {
