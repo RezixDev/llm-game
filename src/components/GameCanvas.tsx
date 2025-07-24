@@ -27,7 +27,8 @@ const CANVAS_HEIGHT = 600;
 
 export default function GameCanvas() {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const [showSaveLoadModal, setShowSaveLoadModal] = useState(false); // NEW
+	const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
+	const [gameInitialized, setGameInitialized] = useState(false); // NEW
 
 	// ✨ Use extracted game state management
 	const gameState = useGameState();
@@ -126,10 +127,64 @@ export default function GameCanvas() {
 
 	// ✨ Auto-save on important events (level up, enemy defeat, treasure collection)
 	useEffect(() => {
-		saveSystem.autoSave();
-	}, [gameState.player.level, gameState.player.gold]);
+		if (gameInitialized) {
+			saveSystem.autoSave();
+		}
+	}, [
+		gameState.player.level,
+		gameState.player.gold,
+		gameInitialized,
+		saveSystem.autoSave,
+	]);
 
-	// ✨ Simplified map initialization
+	// ✨ NEW: Auto-load last save state on component mount (page refresh)
+	useEffect(() => {
+		const initializeGame = async () => {
+			// Small delay to ensure all systems are ready
+			await new Promise((resolve) => setTimeout(resolve, 100));
+
+			// Try to load the most recent save state
+			const loaded = saveSystem.loadLastSaveState(true); // silent = true for initial load
+
+			if (loaded) {
+				console.log("Game state restored from previous session");
+			} else {
+				console.log("Starting new game - no previous save found");
+				// Generate initial map if no save was loaded
+				const result = mapGeneration.generateMap(
+					gameState.mapMode,
+					gameState.currentLayout
+				);
+
+				gameState.setNpcs(result.npcs);
+				gameState.setEnemies(result.enemies);
+				gameState.setTreasures(result.treasures);
+				gameState.setPlayer((prev) => ({
+					...prev,
+					x: result.playerSpawn.x,
+					y: result.playerSpawn.y,
+				}));
+			}
+
+			setGameInitialized(true);
+		};
+
+		initializeGame();
+	}, []); // Only run once on mount
+
+	// ✨ Auto-save before page unload (when user closes tab/refreshes)
+	useEffect(() => {
+		const handleBeforeUnload = () => {
+			if (gameInitialized) {
+				saveSystem.autoSave();
+			}
+		};
+
+		window.addEventListener("beforeunload", handleBeforeUnload);
+		return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+	}, [gameInitialized, saveSystem.autoSave]);
+
+	// ✨ Simplified map initialization (now only used for manual generation)
 	const handleGenerateMap = () => {
 		const result = mapGeneration.generateMap(
 			gameState.mapMode,
@@ -144,6 +199,13 @@ export default function GameCanvas() {
 			x: result.playerSpawn.x,
 			y: result.playerSpawn.y,
 		}));
+
+		// Auto-save after generating new map
+		setTimeout(() => {
+			if (gameInitialized) {
+				saveSystem.autoSave();
+			}
+		}, 500);
 	};
 
 	return (

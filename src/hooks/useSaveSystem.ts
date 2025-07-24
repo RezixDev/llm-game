@@ -252,6 +252,79 @@ export const useSaveSystem = ({
     }
   }, [setPlayer, setNpcs, setEnemies, setTreasures, setMapMode, setCurrentLayout, setGameMessage]);
 
+  // Load the most recent save state (for auto-loading on refresh)
+  const loadLastSaveState = useCallback((silent: boolean = false) => {
+    // Try to find the most recent save (including auto-save)
+    let mostRecentSave: { data: GameSaveData; source: string } | null = null;
+    let mostRecentTimestamp = 0;
+
+    // Check auto-save first
+    const autoSaveData = localStorage.getItem('game_autosave');
+    if (autoSaveData) {
+      try {
+        const parsed: GameSaveData = JSON.parse(autoSaveData);
+        if (parsed.timestamp > mostRecentTimestamp) {
+          mostRecentSave = { data: parsed, source: 'auto-save' };
+          mostRecentTimestamp = parsed.timestamp;
+        }
+      } catch (error) {
+        console.error('Error parsing auto-save:', error);
+      }
+    }
+
+    // Check all manual save slots
+    for (let i = 1; i <= MAX_SAVE_SLOTS; i++) {
+      const saveData = localStorage.getItem(`game_save_slot_${i}`);
+      if (saveData) {
+        try {
+          const parsed: GameSaveData = JSON.parse(saveData);
+          if (parsed.timestamp > mostRecentTimestamp) {
+            mostRecentSave = { data: parsed, source: `slot_${i}` };
+            mostRecentTimestamp = parsed.timestamp;
+          }
+        } catch (error) {
+          console.error(`Error parsing save slot ${i}:`, error);
+        }
+      }
+    }
+
+    // Load the most recent save if found
+    if (mostRecentSave) {
+      try {
+        const saveData = mostRecentSave.data;
+        
+        setPlayer(saveData.player);
+        setNpcs(saveData.npcs);
+        setEnemies(saveData.enemies);
+        setTreasures(saveData.treasures);
+        setMapMode(saveData.mapMode);
+        setCurrentLayout(saveData.currentLayout);
+        
+        if (!silent) {
+          const sourceText = mostRecentSave.source === 'auto-save' ? 'auto-save' : mostRecentSave.source.replace('_', ' ');
+          setGameMessage(`Game restored from ${sourceText} (${saveData.saveName})!`);
+          setTimeout(() => setGameMessage(""), 4000);
+        }
+        
+        return true;
+      } catch (error) {
+        console.error('Failed to load last save state:', error);
+        if (!silent) {
+          setGameMessage("Failed to restore last save state!");
+          setTimeout(() => setGameMessage(""), 3000);
+        }
+        return false;
+      }
+    }
+
+    // No save found
+    if (!silent) {
+      setGameMessage("No previous save found - starting new game!");
+      setTimeout(() => setGameMessage(""), 3000);
+    }
+    return false;
+  }, [setPlayer, setNpcs, setEnemies, setTreasures, setMapMode, setCurrentLayout, setGameMessage]);
+
   // Export save data as JSON string (for sharing or backup)
   const exportSave = useCallback((slotId: string) => {
     const saveData = localStorage.getItem(`game_save_${slotId}`);
@@ -287,6 +360,9 @@ export const useSaveSystem = ({
     // Auto-save
     autoSave,
     loadAutoSave,
+    
+    // Auto-restore functionality (NEW)
+    loadLastSaveState,
     
     // Utility functions
     getSaveSlots,

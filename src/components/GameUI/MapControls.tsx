@@ -1,6 +1,7 @@
 // ===== components/GameUI/MapControls.tsx (Updated) =====
 import React from "react";
 import type { MapMode } from "@/types/GameTypes";
+import { NewGameButton } from "./NewGameButton";
 
 interface MapControlsProps {
 	mapMode: MapMode;
@@ -8,7 +9,8 @@ interface MapControlsProps {
 	onMapModeChange: (mode: MapMode) => void;
 	onLayoutChange: (layout: string) => void;
 	onGenerateMap: () => void;
-	onOpenSaveLoad: () => void; // New prop for save/load modal
+	onOpenSaveLoad: () => void;
+	onNewGame: () => void; // NEW
 }
 
 export const MapControls: React.FC<MapControlsProps> = ({
@@ -18,6 +20,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
 	onLayoutChange,
 	onGenerateMap,
 	onOpenSaveLoad,
+	onNewGame,
 }) => {
 	return (
 		<div
@@ -80,7 +83,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
 			>
 				🔄 Generate New Map
 			</button>
-			{/* New Save/Load Button */}
+			{/* Save/Load Button */}
 			<button
 				onClick={onOpenSaveLoad}
 				style={{
@@ -96,6 +99,8 @@ export const MapControls: React.FC<MapControlsProps> = ({
 			>
 				💾 Save/Load Game
 			</button>
+			{/* NEW: New Game Button */}
+			<NewGameButton onNewGame={onNewGame} />
 		</div>
 	);
 };
