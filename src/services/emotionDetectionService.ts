@@ -38,13 +38,15 @@ export class EmotionDetectionService {
 
   // Performance optimization flags
   private lastDetectionTime = 0;
-  private readonly DETECTION_THROTTLE = 800; // Slower detection rate in game
-  private readonly SMOOTH_FACTOR = 0.4; // More smoothing
+  private readonly DETECTION_THROTTLE = 800;
+  private readonly SMOOTH_FACTOR = 0.4;
   private readonly STRONG_EMOTION_THRESHOLD = 0.6;
   
-  // Video stability flags
+  // Video stability flags - FIXED
   private videoStabilityChecks = 0;
-  private readonly MAX_STABILITY_CHECKS = 5;
+  private readonly MAX_STABILITY_CHECKS = 10; // Increased from 5
+  private readonly STABILITY_CHECK_INTERVAL = 500; // Increased from 200ms
+  private videoReadyPromise: Promise<void> | null = null;
   
   static getInstance(): EmotionDetectionService {
     if (!EmotionDetectionService.instance) {
@@ -59,7 +61,6 @@ export class EmotionDetectionService {
     try {
       console.log('🔄 Loading face-api.js models...');
       
-      // Load models with error handling
       const modelPromises = [
         faceapi.nets.tinyFaceDetector.loadFromUri('/models').catch(e => {
           throw new Error(`TinyFaceDetector load failed: ${e.message}`);
@@ -90,43 +91,71 @@ export class EmotionDetectionService {
           width: { ideal: 640, max: 640 },
           height: { ideal: 480, max: 480 },
           facingMode: 'user',
-          frameRate: { ideal: 15, max: 20 } // Lower frame rate for performance
+          frameRate: { ideal: 15, max: 20 }
         }
       });
 
       console.log('✅ Camera stream obtained');
 
-      // Create video element with optimized settings
+      // Create and configure video element
       this.videoElement = document.createElement('video');
       this.videoElement.srcObject = this.stream;
       this.videoElement.autoplay = true;
       this.videoElement.muted = true;
       this.videoElement.playsInline = true;
-      
-      // Optimize video element for better performance
       this.videoElement.style.width = '320px';
       this.videoElement.style.height = '240px';
       
-      return new Promise((resolve, reject) => {
+      // FIXED: Better video readiness handling
+      this.videoReadyPromise = new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('Camera initialization timeout'));
-        }, 10000);
+        }, 15000); // Increased timeout
 
-        this.videoElement!.onloadedmetadata = () => {
+        // Multiple event handlers for better reliability
+        const cleanup = () => {
           clearTimeout(timeout);
-          console.log(`✅ Video ready: ${this.videoElement!.videoWidth}x${this.videoElement!.videoHeight}`);
-          
-          // Reset stability checks
-          this.videoStabilityChecks = 0;
-          resolve();
+          this.videoElement?.removeEventListener('loadedmetadata', onReady);
+          this.videoElement?.removeEventListener('canplay', onReady);
+          this.videoElement?.removeEventListener('playing', onReady);
+          this.videoElement?.removeEventListener('error', onError);
+        };
+
+        const onReady = () => {
+          if (this.videoElement && 
+              this.videoElement.videoWidth > 0 && 
+              this.videoElement.videoHeight > 0 &&
+              this.videoElement.readyState >= 2) {
+            console.log(`✅ Video ready: ${this.videoElement.videoWidth}x${this.videoElement.videoHeight}, readyState: ${this.videoElement.readyState}`);
+            cleanup();
+            resolve();
+          }
         };
         
-        this.videoElement!.onerror = (error) => {
-          clearTimeout(timeout);
+        const onError = (error: Event) => {
           console.error('❌ Video element error:', error);
+          cleanup();
           reject(new Error('Video element failed to load'));
         };
+
+        this.videoElement!.addEventListener('loadedmetadata', onReady);
+        this.videoElement!.addEventListener('canplay', onReady);
+        this.videoElement!.addEventListener('playing', onReady);
+        this.videoElement!.addEventListener('error', onError);
+
+        // Force play to trigger events
+        this.videoElement!.play().catch(playError => {
+          console.warn('Video play failed:', playError);
+          // Don't reject here, might still work
+        });
+
+        // Check immediately in case video is already ready
+        setTimeout(onReady, 100);
       });
+
+      await this.videoReadyPromise;
+      this.videoStabilityChecks = 0; // Reset after successful setup
+      
     } catch (error) {
       console.error('❌ Failed to start camera:', error);
       if (error.name === 'NotAllowedError') {
@@ -158,6 +187,7 @@ export class EmotionDetectionService {
       this.videoElement = null;
     }
 
+    this.videoReadyPromise = null;
     this.resetEmotionHistory();
     console.log('✅ Camera stopped');
   }
@@ -180,50 +210,71 @@ export class EmotionDetectionService {
 
     this.onEmotionCallback = onEmotionUpdate;
     this.isDetecting = true;
-    this.lastDetectionTime = 0; // Reset throttle
+    this.lastDetectionTime = 0;
 
     console.log('🚀 Starting emotion detection with game optimization...');
 
-    // Wait for video to stabilize before starting detection
+    // FIXED: Wait for video to be truly ready
     await this.waitForVideoStability();
 
-    // Start detection loop with throttling for game performance
+    // Start detection loop
     this.detectionInterval = window.setInterval(async () => {
       const now = Date.now();
       
-      // Throttle detection calls to reduce CPU usage during gameplay
       if (now - this.lastDetectionTime < this.DETECTION_THROTTLE) {
         return;
       }
       
       this.lastDetectionTime = now;
       await this.detectEmotion();
-    }, 200); // Check every 200ms, but throttle actual detection
+    }, 200);
 
     console.log('✅ Emotion detection started with game optimization');
   }
 
+  // FIXED: Enhanced video stability checking
   private async waitForVideoStability(): Promise<void> {
     return new Promise((resolve) => {
+      this.videoStabilityChecks = 0;
+      
       const checkStability = () => {
-        if (!this.videoElement || 
-            this.videoElement.videoWidth === 0 || 
-            this.videoElement.videoHeight === 0 ||
-            this.videoElement.readyState < 2) {
-          
-          this.videoStabilityChecks++;
-          
-          if (this.videoStabilityChecks > this.MAX_STABILITY_CHECKS) {
-            console.warn('⚠️ Video stability timeout, proceeding anyway');
-            resolve();
-            return;
-          }
-          
-          setTimeout(checkStability, 200);
-        } else {
+        if (!this.videoElement) {
+          console.warn('⚠️ No video element during stability check');
+          resolve();
+          return;
+        }
+
+        const isReady = 
+          this.videoElement.videoWidth > 0 && 
+          this.videoElement.videoHeight > 0 &&
+          this.videoElement.readyState >= 2 &&
+          !this.videoElement.paused &&
+          !this.videoElement.ended;
+
+        console.log(`🔍 Video stability check ${this.videoStabilityChecks + 1}:`, {
+          width: this.videoElement.videoWidth,
+          height: this.videoElement.videoHeight,
+          readyState: this.videoElement.readyState,
+          paused: this.videoElement.paused,
+          ended: this.videoElement.ended,
+          isReady
+        });
+
+        if (isReady) {
           console.log('✅ Video stability confirmed');
           resolve();
+          return;
         }
+        
+        this.videoStabilityChecks++;
+        
+        if (this.videoStabilityChecks >= this.MAX_STABILITY_CHECKS) {
+          console.warn('⚠️ Video stability timeout, proceeding anyway');
+          resolve();
+          return;
+        }
+        
+        setTimeout(checkStability, this.STABILITY_CHECK_INTERVAL);
       };
       
       checkStability();
@@ -244,31 +295,55 @@ export class EmotionDetectionService {
     console.log('✅ Emotion detection stopped');
   }
 
+  // FIXED: Enhanced video readiness check with better error handling
   private async detectEmotion(): Promise<void> {
     if (!this.videoElement || !this.isDetecting) return;
 
     try {
-      // Enhanced video readiness check
-      if (this.videoElement.videoWidth === 0 || 
-          this.videoElement.videoHeight === 0 ||
-          this.videoElement.readyState < 2 ||
-          this.videoElement.paused ||
-          this.videoElement.ended) {
-        console.warn('⚠️ Video not ready for detection');
+      // More comprehensive video readiness check
+      const videoReady = 
+        this.videoElement.videoWidth > 0 && 
+        this.videoElement.videoHeight > 0 &&
+        this.videoElement.readyState >= 2 &&
+        !this.videoElement.paused &&
+        !this.videoElement.ended &&
+        !this.videoElement.seeking;
+
+      if (!videoReady) {
+        // Log detailed status for debugging
+        console.warn('⚠️ Video not ready for detection:', {
+          width: this.videoElement.videoWidth,
+          height: this.videoElement.videoHeight,
+          readyState: this.videoElement.readyState,
+          paused: this.videoElement.paused,
+          ended: this.videoElement.ended,
+          seeking: this.videoElement.seeking,
+          currentTime: this.videoElement.currentTime
+        });
+        
+        // Try to resume video if paused
+        if (this.videoElement.paused && !this.videoElement.ended) {
+          try {
+            await this.videoElement.play();
+            console.log('🔄 Resumed paused video');
+          } catch (playError) {
+            console.warn('Failed to resume video:', playError);
+          }
+        }
+        
         this.updateEmotionHistory(null);
         return;
       }
 
-      // Use optimized detection settings for game performance
+      // Perform face detection
       const detections = await faceapi
         .detectAllFaces(this.videoElement, new faceapi.TinyFaceDetectorOptions({
-          inputSize: 192, // Smaller input size for better performance
-          scoreThreshold: 0.4 // Slightly higher threshold for stability
+          inputSize: 192,
+          scoreThreshold: 0.4
         }))
         .withFaceExpressions();
 
       if (detections.length === 0) {
-        // No face detected
         this.updateEmotionHistory(null);
         return;
       }
@@ -276,7 +351,6 @@ export class EmotionDetectionService {
       const expressions = detections[0].expressions;
       const emotionData = this.processExpressions(expressions);
       
-      // Additional confidence filtering for game stability
       if (emotionData.confidence < 0.3) {
         this.updateEmotionHistory(null);
         return;
@@ -300,14 +374,12 @@ export class EmotionDetectionService {
       neutral: expressions.neutral,
     };
 
-    // Find primary emotion with enhanced filtering
     const sortedEmotions = Object.entries(emotionScores)
       .sort(([, a], [, b]) => b - a);
     
     const [primaryEmotion, primaryScore] = sortedEmotions[0];
     const [secondaryEmotion, secondaryScore] = sortedEmotions[1];
     
-    // If emotions are very close, default to neutral for stability
     if (primaryScore - secondaryScore < 0.1 && primaryScore < 0.6) {
       return {
         primary: 'neutral',
@@ -326,18 +398,15 @@ export class EmotionDetectionService {
   }
 
   private updateEmotionHistory(newEmotion: EmotionData | null): void {
-    // Update history
     this.emotionHistory.previous = this.emotionHistory.current;
     this.emotionHistory.current = newEmotion;
 
-    // Apply enhanced smoothing for game stability
     if (newEmotion) {
       this.emotionHistory.smoothed = this.applyEnhancedSmoothing(newEmotion);
     } else {
-      // Gradually fade out emotion rather than immediately clearing
       if (this.emotionHistory.smoothed) {
         const fadedEmotion = { ...this.emotionHistory.smoothed };
-        fadedEmotion.confidence *= 0.8; // Fade confidence
+        fadedEmotion.confidence *= 0.8;
         
         if (fadedEmotion.confidence < 0.2) {
           this.emotionHistory.smoothed = null;
@@ -347,7 +416,6 @@ export class EmotionDetectionService {
       }
     }
 
-    // Notify callback with stability check
     if (this.onEmotionCallback) {
       this.onEmotionCallback(this.emotionHistory.smoothed);
     }
@@ -356,20 +424,18 @@ export class EmotionDetectionService {
   private applyEnhancedSmoothing(newEmotion: EmotionData): EmotionData {
     const previous = this.emotionHistory.smoothed;
     
-    // If no previous emotion, use new emotion but with reduced confidence for stability
     if (!previous) {
       return {
         ...newEmotion,
-        confidence: newEmotion.confidence * 0.8 // Reduce initial confidence
+        confidence: newEmotion.confidence * 0.8
       };
     }
 
-    // If strong emotion detected, use it but still apply some smoothing
     if (newEmotion.confidence > this.STRONG_EMOTION_THRESHOLD) {
       const smoothedEmotions: any = {};
       Object.entries(newEmotion.allEmotions).forEach(([emotion, score]) => {
         const prevScore = previous.allEmotions[emotion as keyof typeof previous.allEmotions] || 0;
-        smoothedEmotions[emotion] = prevScore * 0.3 + score * 0.7; // Less smoothing for strong emotions
+        smoothedEmotions[emotion] = prevScore * 0.3 + score * 0.7;
       });
 
       const primaryEmotion = Object.entries(smoothedEmotions).reduce((max, [emotion, score]) => 
@@ -385,20 +451,17 @@ export class EmotionDetectionService {
       };
     }
 
-    // Apply heavy smoothing for weak emotions to prevent flickering
     const smoothedEmotions: any = {};
     Object.entries(newEmotion.allEmotions).forEach(([emotion, score]) => {
       const prevScore = previous.allEmotions[emotion as keyof typeof previous.allEmotions] || 0;
       smoothedEmotions[emotion] = prevScore * (1 - this.SMOOTH_FACTOR) + score * this.SMOOTH_FACTOR;
     });
 
-    // Recalculate primary emotion from smoothed scores
     const primaryEmotion = Object.entries(smoothedEmotions).reduce((max, [emotion, score]) => 
       score > max.score ? { emotion, score } : max,
       { emotion: 'neutral', score: 0 }
     );
 
-    // If confidence is too low after smoothing, default to neutral
     if (primaryEmotion.score < 0.35) {
       return {
         primary: 'neutral',
@@ -438,10 +501,10 @@ export class EmotionDetectionService {
   }
 
   isReady(): boolean {
-    return this.modelsLoaded && this.videoElement !== null;
+    return this.modelsLoaded && this.videoElement !== null && 
+           this.videoElement.videoWidth > 0 && this.videoElement.videoHeight > 0;
   }
 
-  // Utility method for generating emotion context for LLM
   getEmotionContext(): string {
     const emotion = this.getCurrentEmotion();
     
@@ -455,7 +518,6 @@ export class EmotionDetectionService {
     return `The player appears ${confidenceLevel} ${emotion.primary}`;
   }
 
-  // Emotion mapping for NPC context
   getEmotionDescription(): string {
     const emotion = this.getCurrentEmotion();
     
@@ -474,13 +536,24 @@ export class EmotionDetectionService {
     return descriptions[emotion.primary] || 'uncertain';
   }
 
-  // Performance monitoring method
+  // FIXED: Enhanced performance monitoring
   getPerformanceStats(): { 
     isDetecting: boolean; 
     lastDetectionTime: number; 
     detectionRate: number;
     videoReady: boolean;
+    videoDetails: any;
   } {
+    const videoDetails = this.videoElement ? {
+      width: this.videoElement.videoWidth,
+      height: this.videoElement.videoHeight,
+      readyState: this.videoElement.readyState,
+      paused: this.videoElement.paused,
+      ended: this.videoElement.ended,
+      currentTime: this.videoElement.currentTime,
+      duration: this.videoElement.duration
+    } : null;
+
     return {
       isDetecting: this.isDetecting,
       lastDetectionTime: this.lastDetectionTime,
@@ -488,7 +561,10 @@ export class EmotionDetectionService {
       videoReady: this.videoElement ? 
         this.videoElement.videoWidth > 0 && 
         this.videoElement.videoHeight > 0 && 
-        this.videoElement.readyState >= 2 : false
+        this.videoElement.readyState >= 2 &&
+        !this.videoElement.paused &&
+        !this.videoElement.ended : false,
+      videoDetails
     };
   }
 }
